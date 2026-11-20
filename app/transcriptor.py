@@ -8,7 +8,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-with open("reunion.mp3", "rb") as audio:
+with open("data/input/reunion.mp3", "rb") as audio:
     result = client.audio.transcriptions.create(
         model="gpt-4o-transcribe-diarize",
         file=audio,
@@ -17,7 +17,7 @@ with open("reunion.mp3", "rb") as audio:
     )
 
 # Crear carpeta si no existe
-os.makedirs("extraccion", exist_ok=True)
+os.makedirs("data/output", exist_ok=True)
 
 # Guardar transcripción
 data = {
@@ -32,7 +32,7 @@ data = {
     ]
 }
 
-with open("extraccion/transcripcion.json", "w", encoding="utf-8") as f:
+with open("data/output/transcripcion.json", "w", encoding="utf-8") as f:
     json.dump(data, f, ensure_ascii=False, indent=4)
 
-print("Transcripción guardada en extraccion/transcripcion.json")
+print("Transcripción guardada en data/output/transcripcion.json")

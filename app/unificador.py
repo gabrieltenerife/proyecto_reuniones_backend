@@ -1,7 +1,7 @@
 import json
 
 # Leer JSON
-with open("extraccion/transcripcion.json", "r", encoding="utf-8") as f:
+with open("data/output/transcripcion.json", "r", encoding="utf-8") as f:
     data = json.load(f)
 
 # Ordenar segmentos cronológicamente
@@ -29,7 +29,7 @@ if frases:
     texto += f"Hablante {speaker_actual}: {' '.join(frases)}"
 
 # Guardar TXT
-with open("extraccion/transcripcion_completa.txt", "w", encoding="utf-8") as f:
+with open("data/output/transcripcion_completa.txt", "w", encoding="utf-8") as f:
     f.write(texto)
 
 print("Transcripción agrupada guardada correctamente.")

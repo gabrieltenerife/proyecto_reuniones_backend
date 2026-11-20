@@ -1,2 +1,4 @@
 /.env
 /extraccion
+/app/__pycache__/
+/data
