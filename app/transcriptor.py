@@ -1,8 +1,8 @@
 from dotenv import load_dotenv
 from openai import OpenAI
 from pathlib import Path
-import json
 import os
+from database import TABLE_NAME, supabase
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -16,11 +16,7 @@ with open("data/input/reunion.mp3", "rb") as audio:
         chunking_strategy="auto"
     )
 
-# Crear carpeta si no existe
-os.makedirs("data/output", exist_ok=True)
-
-# Guardar transcripción
-data = {
+transcription = {
     "segments": [
         {
             "speaker": segment.speaker,
@@ -32,7 +28,12 @@ data = {
     ]
 }
 
-with open("data/output/transcripcion.json", "w", encoding="utf-8") as f:
-    json.dump(data, f, ensure_ascii=False, indent=4)
+response = supabase.table(TABLE_NAME).insert(
+    {
+        "texto_bruto": "",
+        "texto_resumido": "",
+        "transcripcion": transcription,
+    }
+).execute()
 
-print("Transcripción guardada en data/output/transcripcion.json")
+print(response.data[0]["id"])

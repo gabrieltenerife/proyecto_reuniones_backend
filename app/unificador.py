@@ -1,11 +1,18 @@
-import json
+import sys
+from database import TABLE_NAME, supabase
 
-# Leer JSON
-with open("data/output/transcripcion.json", "r", encoding="utf-8") as f:
-    data = json.load(f)
+if len(sys.argv) != 2:
+    raise ValueError("Se necesita el ID de la reunión en Supabase")
 
-# Ordenar segmentos cronológicamente
-segments = sorted(data["segments"], key=lambda x: x["start"])
+meeting_id = int(sys.argv[1])
+response = (
+    supabase.table(TABLE_NAME)
+    .select("transcripcion")
+    .eq("id", meeting_id)
+    .single()
+    .execute()
+)
+segments = sorted(response.data["transcripcion"]["segments"], key=lambda x: x["start"])
 
 # Agrupar intervenciones consecutivas
 texto = ""
@@ -28,8 +35,6 @@ for segment in segments:
 if frases:
     texto += f"Hablante {speaker_actual}: {' '.join(frases)}"
 
-# Guardar TXT
-with open("data/output/transcripcion_completa.txt", "w", encoding="utf-8") as f:
-    f.write(texto)
+supabase.table(TABLE_NAME).update({"texto_bruto": texto}).eq("id", meeting_id).execute()
 
-print("Transcripción agrupada guardada correctamente.")
+print("Transcripción completa guardada en Supabase.")

@@ -8,21 +8,22 @@ Proyecto en desarrollo para transcribir reuniones, identificar hablantes y gener
 data/input/reunion.mp3
         │
         ▼
-app/transcriptor.py ──► data/output/transcripcion.json
+app/transcriptor.py ──► Docs.transcripcion
                               │
                               ▼
-                       app/unificador.py
+                       app/unificador.py ──► Docs.texto_bruto
                               │
                               ▼
-                 data/output/transcripcion_completa.txt
+                          app/resume.py ──► Docs.texto_resumido
 ```
 
-`app/main.py` ejecuta los dos pasos en orden. El transcriptor genera segmentos con hablante y marcas de tiempo; el unificador los ordena cronológicamente y junta los segmentos consecutivos del mismo hablante.
+`app/main.py` ejecuta los pasos en orden. Cada resultado se envía a Supabase al terminar; los scripts no guardan los resultados en archivos locales. El audio permanece en `data/input` y no se sube a Supabase.
 
 ## Requisitos
 
 - Python 3 instalado.
 - Una clave de API de OpenAI con acceso al modelo de transcripción utilizado por el proyecto.
+- Un proyecto de Supabase con una tabla `Docs` y las columnas `id`, `created_at`, `texto_bruto`, `texto_resumido` y `transcripcion`.
 - Conexión a Internet al ejecutar la transcripción.
 
 ## Instalación
@@ -43,7 +44,7 @@ source .venv/bin/activate
 Instala las dependencias:
 
 ```bash
-python -m pip install openai python-dotenv
+python -m pip install openai python-dotenv supabase
 ```
 
 ## Configuración
@@ -51,13 +52,15 @@ python -m pip install openai python-dotenv
 1. Crea un archivo `.env` en la raíz del proyecto.
 2. Añade tu clave:
 
-   ```dotenv
-   OPENAI_API_KEY=tu_clave_de_api
-   ```
+    ```dotenv
+    OPENAI_API_KEY=tu_clave_de_api
+    SUPABASE_URL=https://vxagataaejcqsrojdniw.supabase.co
+    SUPABASE_SECRET_KEY=tu_clave_secreta_nueva
+    ```
 
 3. Coloca el audio que quieres procesar en `data/input/reunion.mp3`. Crea la carpeta `data/input` si todavía no existe.
 
-No compartas ni subas `.env` al repositorio. La carpeta `data/` está excluida de Git, por lo que el audio y las transcripciones generadas se mantienen locales.
+No compartas ni subas `.env` al repositorio. La clave secreta de Supabase solo debe usarse en este backend y mantenerse privada. El audio se envía a OpenAI para su transcripción, pero no se guarda en Supabase.
 
 ## Uso
 
@@ -67,10 +70,7 @@ Desde la raíz del proyecto, ejecuta:
 python app/main.py
 ```
 
-Al terminar, encontrarás:
-
-- `data/output/transcripcion.json`: segmentos con hablante, tiempo de inicio, tiempo de fin y texto.
-- `data/output/transcripcion_completa.txt`: texto agrupado por hablante.
+Al terminar, la fila de la reunión en `Docs` contiene los segmentos, la transcripción completa y el resumen. No se generan archivos de salida locales.
 
 La llamada a la API puede tener coste según tu cuenta y el audio procesado.
 
@@ -80,14 +80,13 @@ La llamada a la API puede tener coste según tu cuenta y el audio procesado.
 .
 ├── app/
 │   ├── main.py             # Ejecuta el flujo completo
-│   ├── transcriptor.py     # Audio a JSON mediante OpenAI
-│   └── unificador.py       # JSON a texto agrupado por hablante
+│   ├── database.py         # Conexión a Supabase
+│   ├── transcriptor.py     # Audio a segmentos y los inserta en Supabase
+│   ├── unificador.py       # Agrupa segmentos y actualiza Supabase
+│   └── resume.py           # Genera y guarda el resumen en Supabase
 ├── data/                   # Archivos locales; excluidos de Git
-│   ├── input/
-│   │   └── reunion.mp3
-│   └── output/
-│       ├── transcripcion.json
-│       └── transcripcion_completa.txt
+│   └── input/
+│       └── reunion.mp3
 ├── .env                    # Clave de API; no debe subirse
 └── README.md
 ```

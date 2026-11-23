@@ -13,8 +13,26 @@ def main() -> int:
         ROOT_DIR / "app" / "resume.py",
     )
 
-    for script in scripts:
-        subprocess.run([sys.executable, str(script)], cwd=ROOT_DIR, check=True)
+    meeting_id = None
+
+    for index, script in enumerate(scripts):
+        command = [sys.executable, str(script)]
+        if meeting_id is not None:
+            command.append(meeting_id)
+
+        if index == 0:
+            result = subprocess.run(
+                command,
+                cwd=ROOT_DIR,
+                check=True,
+                stdout=subprocess.PIPE,
+                text=True,
+            )
+            meeting_id = result.stdout.strip()
+            if not meeting_id.isdigit():
+                raise ValueError("No se recibió un ID válido de Supabase")
+        else:
+            subprocess.run(command, cwd=ROOT_DIR, check=True)
 
     return 0
 
