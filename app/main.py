@@ -10,6 +10,7 @@ def main() -> int:
     scripts = (
         ROOT_DIR / "app" / "transcriptor.py",
         ROOT_DIR / "app" / "unificador.py",
+        ROOT_DIR / "app" / "resume.py",
     )
 
     for script in scripts:
