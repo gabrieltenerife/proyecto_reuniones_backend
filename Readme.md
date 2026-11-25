@@ -1,29 +1,28 @@
-# Backend de transcripción de reuniones
+# Backend de procesamiento de reuniones
 
-Proyecto en desarrollo para transcribir reuniones, identificar hablantes y generar una transcripción de texto fácil de leer. El flujo actual utiliza la API de OpenAI y está pensado para procesar un archivo de audio por ejecución.
+El backend descarga de Supabase Storage el audio asociado a una reunión, identifica hablantes y genera una transcripción y un resumen con OpenAI. Actualiza la fila existente de `Docs`; no crea una reunión nueva.
 
 ## Flujo actual
 
 ```text
-data/input/reunion.mp3
-        │
-        ▼
-app/transcriptor.py ──► Docs.transcripcion
+Docs.audio_path ──► Supabase Storage (meeting-audios)
                               │
                               ▼
-                       app/unificador.py ──► Docs.texto_bruto
+                     app/procesador.py
                               │
-                              ▼
-                          app/resume.py ──► Docs.texto_resumido
+                              ├──► Docs.transcripcion
+                              ├──► Docs.texto_bruto
+                              └──► Docs.texto_resumido
 ```
 
-`app/main.py` ejecuta los pasos en orden. Cada resultado se envía a Supabase al terminar; los scripts no guardan los resultados en archivos locales. El audio permanece en `data/input` y no se sube a Supabase.
+El frontend primero sube el archivo al bucket `meeting-audios` y guarda su ruta en `Docs.audio_path`. Después llama al endpoint de procesamiento con el ID de esa fila.
 
 ## Requisitos
 
 - Python 3 instalado.
 - Una clave de API de OpenAI con acceso al modelo de transcripción utilizado por el proyecto.
-- Un proyecto de Supabase con una tabla `Docs` y las columnas `id`, `created_at`, `texto_bruto`, `texto_resumido` y `transcripcion`.
+- Un proyecto de Supabase con una tabla `Docs` y las columnas `id`, `audio_path`, `texto_bruto`, `texto_resumido` y `transcripcion`.
+- Un bucket privado de Supabase Storage llamado `meeting-audios` (o el nombre configurado en `SUPABASE_STORAGE_BUCKET`).
 - Conexión a Internet al ejecutar la transcripción.
 
 ## Instalación
@@ -44,7 +43,7 @@ source .venv/bin/activate
 Instala las dependencias:
 
 ```bash
-python -m pip install openai python-dotenv supabase
+python -m pip install openai python-dotenv supabase fastapi uvicorn
 ```
 
 ## Configuración
@@ -56,21 +55,41 @@ python -m pip install openai python-dotenv supabase
     OPENAI_API_KEY=tu_clave_de_api
     SUPABASE_URL=https://vxagataaejcqsrojdniw.supabase.co
     SUPABASE_SECRET_KEY=tu_clave_secreta_nueva
+    REUNIONES_API_KEY=una_clave_larga_aleatoria
+    SUPABASE_STORAGE_BUCKET=meeting-audios
+    OPENAI_SUMMARY_MODEL=gpt-6-luna
+    # Opcional: orígenes web permitidos, separados por comas.
+    CORS_ORIGINS=https://tu-frontend.example
     ```
 
-3. Coloca el audio que quieres procesar en `data/input/reunion.mp3`. Crea la carpeta `data/input` si todavía no existe.
-
-No compartas ni subas `.env` al repositorio. La clave secreta de Supabase solo debe usarse en este backend y mantenerse privada. El audio se envía a OpenAI para su transcripción, pero no se guarda en Supabase.
+No compartas ni subas `.env` al repositorio. La clave secreta de Supabase y la clave de OpenAI solo deben usarse en este backend. El audio se envía a OpenAI para su transcripción.
 
 ## Uso
 
-Desde la raíz del proyecto, ejecuta:
+Arranca la API desde la raíz del proyecto:
 
-```bash
-python app/main.py
+```powershell
+python -m uvicorn app.api:app --host 0.0.0.0 --port 8000
 ```
 
-Al terminar, la fila de la reunión en `Docs` contiene los segmentos, la transcripción completa y el resumen. No se generan archivos de salida locales.
+Después de subir el audio y guardar `audio_path`, el frontend debe solicitar el procesamiento:
+
+```js
+const apiBase = API_URL.replace(/\/+$/, "");
+const respuesta = await fetch(`${apiBase}/reuniones/${meetingId}/procesar`, {
+  method: "POST",
+  headers: {
+    "X-API-Key": API_KEY,
+    "ngrok-skip-browser-warning": "1",
+  },
+});
+
+if (!respuesta.ok) {
+  throw new Error(await respuesta.text());
+}
+```
+
+Al terminar, la misma fila de `Docs` contiene `transcripcion`, `texto_bruto` y `texto_resumido`. Este endpoint procesa audios subidos a Storage; `app/main.py` conserva su flujo local anterior.
 
 La llamada a la API puede tener coste según tu cuenta y el audio procesado.
 
@@ -79,18 +98,17 @@ La llamada a la API puede tener coste según tu cuenta y el audio procesado.
 ```text
 .
 ├── app/
-│   ├── main.py             # Ejecuta el flujo completo
+│   ├── api.py              # Endpoint para solicitar el procesamiento
 │   ├── database.py         # Conexión a Supabase
-│   ├── transcriptor.py     # Audio a segmentos y los inserta en Supabase
-│   ├── unificador.py       # Agrupa segmentos y actualiza Supabase
-│   └── resume.py           # Genera y guarda el resumen en Supabase
-├── data/                   # Archivos locales; excluidos de Git
-│   └── input/
-│       └── reunion.mp3
+│   ├── main.py             # Ejecución por línea de comandos
+│   ├── procesador.py       # Descarga, transcripción, resumen y actualización
+│   ├── transcriptor.py     # Flujo anterior con audio local (legacy)
+│   ├── unificador.py       # Flujo anterior (legacy)
+│   └── resume.py           # Flujo anterior (legacy)
 ├── .env                    # Clave de API; no debe subirse
 └── README.md
 ```
 
 ## Estado del proyecto
 
-El flujo básico está en desarrollo y puede ampliarse. La estructura y este documento describen el comportamiento actual; futuras mejoras pueden incorporar opciones de entrada, pruebas automatizadas y soporte para procesar varias reuniones.
+La API procesa la reunión de forma síncrona; el cliente debe esperar su respuesta antes de asumir que la transcripción y el resumen están listos. No incluyas una clave secreta en código frontend desplegado públicamente; para producción, protege este endpoint mediante autenticación de usuario o un servicio backend de confianza.
