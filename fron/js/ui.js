@@ -35,9 +35,9 @@ export function toast(mensaje, tipo = "info") {
 }
 
 export function errorVisible(error) {
-  const bloque = h("div", { className: "error" }, error.message);
+  const bloque = h("div", { className: "error", role: "alert" }, error.message);
   if (error.status === 401) {
-    bloque.append(" ", h("a", { href: "#/ajustes" }, "Revisa la clave en Ajustes."));
+    bloque.append(" ", "Tu sesión puede haber caducado; inicia sesión de nuevo.");
   }
   return bloque;
 }
@@ -97,5 +97,5 @@ export function badgesAlerta(alertas = []) {
 }
 
 export function cargando(texto = "Cargando…") {
-  return h("p", { className: "cargando" }, texto);
+  return h("p", { className: "cargando", role: "status", "aria-live": "polite" }, texto);
 }

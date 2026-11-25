@@ -6,6 +6,7 @@ Requiere el entorno local en marcha y los servicios de prueba (servicios_de_prue
 
     python local/semilla.py
 """
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -17,7 +18,8 @@ entorno.cargar()
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ / "app"))
 
-from database import TABLE_NAME, supabase  # noqa: E402
+from database import TABLE_NAME, propietario_por_email, supabase  # noqa: E402
+from vocabulario import guardar_termino  # noqa: E402
 
 
 REUNIONES = [
@@ -51,12 +53,17 @@ PASOS = ["unificador.py", "resume.py", "indexador.py", "extractor_temas.py"]
 
 
 def cargar_reunion(datos: dict) -> int:
+    owner_id = datos.get("owner_id")
+    owner_email = os.getenv("REUNION_OWNER_EMAIL", "").strip()
+    if owner_id is None and owner_email:
+        owner_id = propietario_por_email(owner_email)
     respuesta = (
         supabase.table(TABLE_NAME)
         .insert({
             "created_at": datos["created_at"],
             "tipo": datos["tipo"],
             "transcripcion": {"segments": datos["segmentos"]},
+            "owner_id": owner_id,
         })
         .execute()
     )
@@ -78,20 +85,26 @@ def ejecutar_pasos(meeting_id: int) -> None:
 
 
 def main() -> int:
+    owner_email = os.getenv("REUNION_OWNER_EMAIL", "").strip()
+    if owner_email:
+        owner_id = propietario_por_email(owner_email)
+    else:
+        cuentas = supabase.table("usuarios").select("id").limit(1).execute().data
+        if cuentas:
+            raise SystemExit(
+                "Define REUNION_OWNER_EMAIL en local/.env para asignar la semilla a una cuenta existente."
+            )
+        owner_id = None
+
     ids = []
     for datos in REUNIONES:
-        meeting_id = cargar_reunion(datos)
+        meeting_id = cargar_reunion({**datos, "owner_id": owner_id})
         ids.append(meeting_id)
         print(f"Reunión {meeting_id} creada ({datos['tipo']})")
         ejecutar_pasos(meeting_id)
 
-    supabase.table("vocabulario").upsert(
-        [
-            {"termino": "Kubernetes", "variante": "cuberneti"},
-            {"termino": "ACME", "variante": ""},
-        ],
-        on_conflict="termino,variante",
-    ).execute()
+    guardar_termino("Kubernetes", "cuberneti", owner_id)
+    guardar_termino("ACME", "", owner_id)
     print("Vocabulario de ejemplo cargado")
 
     supabase.table("exportaciones").insert({

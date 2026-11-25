@@ -88,6 +88,7 @@ export async function mostrarPreguntas(contenedor) {
 
   const entrada = h("textarea", {
     rows: 2,
+    "aria-label": "Escribe una pregunta sobre tus reuniones",
     placeholder: "Escribe tu pregunta…",
     required: true,
     onkeydown: (evento) => {
@@ -150,7 +151,7 @@ export async function mostrarPreguntas(contenedor) {
 
   const listaReuniones = h(
     "div",
-    { className: "filtro-reuniones" },
+    { className: "filtro-reuniones", "aria-labelledby": "filtro-reuniones-titulo" },
     reuniones.length === 0
       ? vacio("No hay reuniones guardadas todavía.")
       : reuniones.map((reunion) =>
@@ -194,7 +195,7 @@ export async function mostrarPreguntas(contenedor) {
       h(
         "aside",
         { className: "panel" },
-        h("h3", {}, "Buscar en"),
+        h("h3", { id: "filtro-reuniones-titulo" }, "Buscar en"),
         textoSeleccion,
         listaReuniones
       ),

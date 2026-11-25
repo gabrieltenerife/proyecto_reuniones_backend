@@ -32,6 +32,7 @@ def main() -> int:
         return 0
 
     secreto = secrets.token_urlsafe(48)
+    secreto_auth = secrets.token_urlsafe(48)
     ahora = int(time.time())
     clave_service_role = _jwt(
         {"role": "service_role", "iss": "local", "iat": ahora, "exp": ahora + 10 * 365 * 86400},
@@ -43,9 +44,9 @@ def main() -> int:
             [
                 "# Generado por local/preparar.py. No subir a Git.",
                 f"JWT_SECRET={secreto}",
+                f"AUTH_SECRET={secreto_auth}",
                 "SUPABASE_URL=http://localhost:54321",
                 f"SUPABASE_SECRET_KEY={clave_service_role}",
-                "API_KEY_FRONT=local-test-key",
                 "CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000",
                 "OPENAI_API_KEY=local-no-real",
                 "OPENAI_BASE_URL=http://127.0.0.1:8090/v1",

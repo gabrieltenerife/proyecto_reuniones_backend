@@ -5,8 +5,15 @@ import { h, toast, formatearFecha, vacio } from "../ui.js";
 export async function mostrarVocabulario(contenedor) {
   const terminos = await api("/vocabulario");
 
-  const termino = h("input", { placeholder: "Término correcto, p. ej. Kubernetes", required: true });
-  const variante = h("input", { placeholder: "Cómo se transcribe mal (opcional), p. ej. cuberneti" });
+  const termino = h("input", {
+    "aria-label": "Término escrito correctamente",
+    placeholder: "Término correcto, p. ej. Kubernetes",
+    required: true,
+  });
+  const variante = h("input", {
+    "aria-label": "Variante que suele transcribirse mal",
+    placeholder: "Cómo se transcribe mal (opcional), p. ej. cuberneti",
+  });
 
   const formulario = h(
     "form",
@@ -57,6 +64,7 @@ export async function mostrarVocabulario(contenedor) {
                   "button",
                   {
                     className: "boton secundario pequeno",
+                    "aria-label": `Eliminar el término ${fila.termino}`,
                     onclick: async () => {
                       if (!confirm(`¿Eliminar "${fila.termino}"?`)) return;
                       try {

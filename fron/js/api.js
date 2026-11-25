@@ -1,15 +1,7 @@
-// Cliente HTTP común: URL, clave local/remota y errores de la API.
+// Cliente HTTP: URL configurable y sesión bearer almacenada durante la pestaña.
 const CLAVE_AJUSTES = "reuniones.ajustes";
+const CLAVE_SESION = "reuniones.sesion";
 const URL_POR_DEFECTO = "http://localhost:8000";
-const CLAVE_LOCAL = "local-test-key";
-
-function esApiLocal(url) {
-  try {
-    return ["localhost", "127.0.0.1", "::1"].includes(new URL(url).hostname);
-  } catch {
-    return false;
-  }
-}
 
 export class ApiError extends Error {
   constructor(mensaje, status) {
@@ -25,37 +17,100 @@ export function obtenerAjustes() {
   } catch {
     guardados = {};
   }
-
-  const apiUrl = guardados.apiUrl || URL_POR_DEFECTO;
-  // El backend de local/api_local.py tiene una clave fija de desarrollo.
-  // Ignora claves antiguas guardadas en el navegador solo si el destino es local.
-  const apiKey = esApiLocal(apiUrl) ? CLAVE_LOCAL : (guardados.apiKey || "");
-
-  return {
-    apiUrl,
-    apiKey,
-  };
+  return { apiUrl: guardados.apiUrl || URL_POR_DEFECTO };
 }
 
 export function guardarAjustes(ajustes) {
-  localStorage.setItem(CLAVE_AJUSTES, JSON.stringify(ajustes));
+  const urlAnterior = obtenerAjustes().apiUrl.replace(/\/$/, "");
+  const apiUrl = ajustes.apiUrl.trim().replace(/\/$/, "");
+  localStorage.setItem(CLAVE_AJUSTES, JSON.stringify({ apiUrl }));
+  if (apiUrl !== urlAnterior) cerrarSesion();
 }
 
-function mensajeDeError(datos, status) {
-  const detalle = datos?.detail;
-  if (typeof detalle === "string") return detalle;
-  if (Array.isArray(detalle)) {
-    return detalle.map((item) => item.msg).join("; ");
+export function obtenerToken() {
+  const raw = sessionStorage.getItem(CLAVE_SESION);
+  if (!raw) return "";
+  try {
+    const sesion = JSON.parse(raw);
+    return sesion.apiUrl === obtenerAjustes().apiUrl.replace(/\/$/, "")
+      ? sesion.accessToken
+      : "";
+  } catch {
+    return "";
   }
-  return `Error ${status}`;
+}
+
+export function cerrarSesion() {
+  sessionStorage.removeItem(CLAVE_SESION);
+}
+
+async function leerRespuesta(respuesta) {
+  const texto = await respuesta.text();
+  let datos = null;
+  try {
+    datos = texto ? JSON.parse(texto) : null;
+  } catch {
+    datos = null;
+  }
+  if (!respuesta.ok) {
+    const detalle = datos?.detail;
+    const mensaje = typeof detalle === "string"
+      ? detalle
+      : Array.isArray(detalle)
+        ? detalle.map((item) => item.msg).join("; ")
+        : `Error ${respuesta.status}`;
+    throw new ApiError(mensaje, respuesta.status);
+  }
+  return datos;
+}
+
+async function enviar(ruta, cuerpo) {
+  const { apiUrl } = obtenerAjustes();
+  const cabeceras = { "Content-Type": "application/json" };
+  let respuesta;
+  try {
+    respuesta = await fetch(apiUrl.replace(/\/$/, "") + ruta, {
+      method: "POST",
+      headers: cabeceras,
+      body: JSON.stringify(cuerpo),
+    });
+  } catch {
+    throw new ApiError(
+      "No se pudo conectar. Comprueba que la API esté activa y que la URL y CORS estén configurados.",
+      0
+    );
+  }
+  return leerRespuesta(respuesta);
+}
+
+export async function iniciarSesion(email, password) {
+  const datos = await enviar("/auth/login", { email, password });
+  guardarSesion(datos);
+  return datos.usuario;
+}
+
+export async function registrarCuenta(email, password) {
+  const datos = await enviar("/auth/register", { email, password });
+  guardarSesion(datos);
+  return datos.usuario;
+}
+
+function guardarSesion(datos) {
+  sessionStorage.setItem(
+    CLAVE_SESION,
+    JSON.stringify({
+      accessToken: datos.access_token,
+      apiUrl: obtenerAjustes().apiUrl.replace(/\/$/, ""),
+    })
+  );
 }
 
 export async function api(ruta, { metodo = "GET", cuerpo } = {}) {
-  const { apiUrl, apiKey } = obtenerAjustes();
-  const cabeceras = { "X-API-Key": apiKey };
-  if (cuerpo !== undefined) {
-    cabeceras["Content-Type"] = "application/json";
-  }
+  const { apiUrl } = obtenerAjustes();
+  const cabeceras = {};
+  const token = obtenerToken();
+  if (token) cabeceras.Authorization = `Bearer ${token}`;
+  if (cuerpo !== undefined) cabeceras["Content-Type"] = "application/json";
 
   let respuesta;
   try {
@@ -66,23 +121,19 @@ export async function api(ruta, { metodo = "GET", cuerpo } = {}) {
     });
   } catch {
     throw new ApiError(
-      "No se pudo conectar con la API. Revisa la URL en Ajustes y CORS_ORIGINS en el .env.",
+      "No se pudo conectar. Comprueba que la API esté activa y que la URL y CORS estén configurados.",
       0
     );
   }
 
   if (respuesta.status === 204) return null;
-
-  const texto = await respuesta.text();
-  let datos = null;
   try {
-    datos = texto ? JSON.parse(texto) : null;
-  } catch {
-    datos = null;
+    return await leerRespuesta(respuesta);
+  } catch (error) {
+    if (error.status === 401 && obtenerToken()) {
+      cerrarSesion();
+      window.dispatchEvent(new Event("sesion-caducada"));
+    }
+    throw error;
   }
-
-  if (!respuesta.ok) {
-    throw new ApiError(mensajeDeError(datos, respuesta.status), respuesta.status);
-  }
-  return datos;
 }

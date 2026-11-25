@@ -26,11 +26,14 @@ def formatear_minuto(segundos: float) -> str:
     return f"{minutos:02}:{segundos_restantes:02}"
 
 
-def buscar_fragmentos(pregunta: str, reuniones: list[int] | None, limite: int) -> list[dict]:
+def buscar_fragmentos(
+    pregunta: str, reuniones: list[int] | None, limite: int, owner_id: str
+) -> list[dict]:
     embedding = generar_embeddings([pregunta])[0]
     response = supabase.rpc(
         "buscar_fragmentos",
         {
+            "propietario": owner_id,
             "consulta": pregunta,
             "embedding_consulta": embedding,
             "reuniones": reuniones,
@@ -71,9 +74,14 @@ def numeros_citados(respuesta: str, total: int) -> list[int]:
     return citados
 
 
-def responder(pregunta: str, reuniones: list[int] | None = None, limite: int = 8) -> dict:
+def responder(
+    pregunta: str,
+    reuniones: list[int] | None = None,
+    limite: int = 8,
+    owner_id: str = "",
+) -> dict:
     pregunta = pregunta.strip()
-    fragmentos = buscar_fragmentos(pregunta, reuniones, limite)
+    fragmentos = buscar_fragmentos(pregunta, reuniones, limite, owner_id)
     if not fragmentos:
         return {
             "respuesta": "No encuentro nada sobre eso en las reuniones guardadas.",

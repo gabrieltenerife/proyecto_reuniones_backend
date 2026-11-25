@@ -6,8 +6,11 @@ from database import TABLE_NAME, supabase
 VERSIONES_TABLE = "versiones"
 
 
-def obtener_reunion(meeting_id: int, columnas: str) -> dict | None:
-    response = supabase.table(TABLE_NAME).select(columnas).eq("id", meeting_id).execute()
+def obtener_reunion(meeting_id: int, columnas: str, owner_id: str | None = None) -> dict | None:
+    consulta = supabase.table(TABLE_NAME).select(columnas).eq("id", meeting_id)
+    if owner_id is not None:
+        consulta = consulta.eq("owner_id", owner_id)
+    response = consulta.execute()
     return response.data[0] if response.data else None
 
 

@@ -10,6 +10,7 @@ Ejecutar:
     python -m unittest discover -s local/pruebas -v
 """
 import json
+import os
 import sys
 import unittest
 import urllib.error
@@ -25,17 +26,23 @@ entorno.cargar()
 
 import semilla  # noqa: E402
 from database import TABLE_NAME, supabase  # noqa: E402
+from vocabulario import guardar_termino  # noqa: E402
 
 
-API = "http://127.0.0.1:8000"
-CLAVE = "local-test-key"
+API = os.getenv("API_URL", "http://127.0.0.1:8000")
 SERVICIOS = "http://127.0.0.1:8026"
+EMAIL_PRUEBAS = "integracion@reuniones.test"
+PASSWORD_PRUEBAS = "Pruebas-locales-seguras-2026"
+TOKEN = None
+OWNER_ID = None
+DATOS_BASE_CARGADOS = False
 
 
-def llamar(metodo: str, ruta: str, cuerpo=None, clave: str | None = CLAVE):
+def llamar(metodo: str, ruta: str, cuerpo=None, token: str | None = "__predeterminado__"):
     cabeceras = {}
-    if clave is not None:
-        cabeceras["X-API-Key"] = clave
+    token = TOKEN if token == "__predeterminado__" else token
+    if token is not None:
+        cabeceras["Authorization"] = f"Bearer {token}"
     datos = None
     if cuerpo is not None:
         datos = json.dumps(cuerpo).encode("utf-8")
@@ -68,7 +75,7 @@ def nueva_reunion(tipo: str = "comercial", segmentos=None) -> int:
             {"speaker": "A", "start": 40.0, "end": 50.0, "text": "Enviamos la propuesta el lunes."},
         ],
     }
-    meeting_id = semilla.cargar_reunion(datos)
+    meeting_id = semilla.cargar_reunion({**datos, "owner_id": OWNER_ID})
     semilla.ejecutar_pasos(meeting_id)
     return meeting_id
 
@@ -76,19 +83,80 @@ def nueva_reunion(tipo: str = "comercial", segmentos=None) -> int:
 class BaseIntegracion(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        global TOKEN, OWNER_ID, DATOS_BASE_CARGADOS
+        if TOKEN is None:
+            estado, datos = llamar(
+                "POST",
+                "/auth/register",
+                {"email": EMAIL_PRUEBAS, "password": PASSWORD_PRUEBAS},
+                token=None,
+            )
+            if estado == 409:
+                estado, datos = llamar(
+                    "POST",
+                    "/auth/login",
+                    {"email": EMAIL_PRUEBAS, "password": PASSWORD_PRUEBAS},
+                    token=None,
+                )
+            if estado not in (200, 201):
+                raise unittest.SkipTest("La API no tiene el login nuevo o no responde.")
+            TOKEN = datos["access_token"]
+            OWNER_ID = datos["usuario"]["id"]
+
         estado, _ = llamar("GET", "/tipos")
         if estado != 200:
             raise unittest.SkipTest("La API local no responde. Revisa los pasos del docstring.")
 
+        if not DATOS_BASE_CARGADOS:
+            estado, reuniones = llamar("GET", "/reuniones")
+            if estado == 200 and not reuniones:
+                for datos in semilla.REUNIONES:
+                    meeting_id = semilla.cargar_reunion({**datos, "owner_id": OWNER_ID})
+                    semilla.ejecutar_pasos(meeting_id)
+                guardar_termino("Kubernetes", "cuberneti", OWNER_ID)
+                guardar_termino("ACME", "", OWNER_ID)
+            DATOS_BASE_CARGADOS = True
+
 
 class AutenticacionYLectura(BaseIntegracion):
-    def test_sin_clave_devuelve_401(self):
-        estado, _ = llamar("GET", "/reuniones", clave=None)
+    def test_sin_sesion_devuelve_401(self):
+        estado, _ = llamar("GET", "/reuniones", token=None)
         self.assertEqual(estado, 401)
 
-    def test_clave_incorrecta_devuelve_401(self):
-        estado, _ = llamar("GET", "/reuniones", clave="mal")
+    def test_token_incorrecto_devuelve_401(self):
+        estado, _ = llamar("GET", "/reuniones", token="mal")
         self.assertEqual(estado, 401)
+
+    def test_login_y_separacion_entre_usuarios(self):
+        estado, sesion = llamar(
+            "POST",
+            "/auth/login",
+            {"email": EMAIL_PRUEBAS, "password": PASSWORD_PRUEBAS},
+            token=None,
+        )
+        self.assertEqual(estado, 200)
+        self.assertEqual(sesion["usuario"]["id"], OWNER_ID)
+
+        correo_otro = "aislamiento@reuniones.test"
+        estado, otra_sesion = llamar(
+            "POST",
+            "/auth/register",
+            {"email": correo_otro, "password": PASSWORD_PRUEBAS},
+            token=None,
+        )
+        if estado == 409:
+            estado, otra_sesion = llamar(
+                "POST",
+                "/auth/login",
+                {"email": correo_otro, "password": PASSWORD_PRUEBAS},
+                token=None,
+            )
+        self.assertIn(estado, (200, 201))
+        estado, reuniones_otro = llamar(
+            "GET", "/reuniones", token=otra_sesion["access_token"]
+        )
+        self.assertEqual(estado, 200)
+        self.assertEqual(reuniones_otro, [])
 
     def test_tipos_de_reunion(self):
         estado, datos = llamar("GET", "/tipos")
@@ -254,7 +322,9 @@ class Preguntas(BaseIntegracion):
         self.assertEqual(llamar("POST", "/preguntas", {"pregunta": "a"})[0], 422)
 
     def test_indexar_sin_transcripcion_409(self):
-        vacia = supabase.table(TABLE_NAME).insert({"tipo": "general", "transcripcion": None}).execute().data[0]["id"]
+        vacia = supabase.table(TABLE_NAME).insert(
+            {"tipo": "general", "transcripcion": None, "owner_id": OWNER_ID}
+        ).execute().data[0]["id"]
         self.assertEqual(llamar("POST", f"/reuniones/{vacia}/indexar")[0], 409)
 
 
@@ -344,7 +414,12 @@ class Exportacion(BaseIntegracion):
 
     def test_reunion_sin_resumen_409(self):
         meeting_id = supabase.table(TABLE_NAME).insert(
-            {"tipo": "general", "transcripcion": {"segments": []}, "texto_resumido": ""}
+            {
+                "tipo": "general",
+                "transcripcion": {"segments": []},
+                "texto_resumido": "",
+                "owner_id": OWNER_ID,
+            }
         ).execute().data[0]["id"]
         self.assertEqual(llamar("POST", f"/reuniones/{meeting_id}/exportar", {"destino": "slack"})[0], 409)
 

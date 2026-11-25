@@ -1,12 +1,19 @@
-// Enrutador de la aplicación: interpreta el hash y carga cada vista.
+// Enrutador y puerta de sesión de la aplicación.
+import { api, cerrarSesion, obtenerToken } from "./api.js";
 import { h, errorVisible, cargando } from "./ui.js";
+import { mostrarAcceso } from "./vistas/acceso.js";
 import { mostrarListado, mostrarDetalle } from "./vistas/reuniones.js";
 import { mostrarPreguntas } from "./vistas/preguntas.js";
 import { mostrarTemas, mostrarTema } from "./vistas/temas.js";
 import { mostrarVocabulario } from "./vistas/vocabulario.js";
 import { mostrarAjustes } from "./vistas/ajustes.js";
 
-const contenido = document.getElementById("contenido");
+const acceso = document.getElementById("acceso");
+const shell = document.getElementById("app-shell");
+const saltoContenido = document.querySelector(".salto-contenido");
+const contenido = document.getElementById("vista");
+const emailPerfil = document.getElementById("perfil-email");
+const avatarPerfil = document.getElementById("perfil-avatar");
 
 const rutas = {
   reuniones: (id, params) =>
@@ -27,11 +34,33 @@ function leerHash() {
   };
 }
 
-async function navegar() {
+function mostrarShell(usuario) {
+  acceso.replaceChildren();
+  shell.hidden = false;
+  saltoContenido.hidden = false;
+  emailPerfil.textContent = usuario?.email || "Cuenta";
+  avatarPerfil.textContent = (usuario?.email?.[0] || "U").toLocaleUpperCase("es-ES");
+}
+
+function mostrarPantallaAcceso() {
+  shell.hidden = true;
+  saltoContenido.hidden = true;
+  mostrarAcceso(acceso, async (usuario) => {
+    mostrarShell(usuario);
+    if (!location.hash) history.replaceState(null, "", "#/reuniones");
+    await navegar(true);
+  });
+}
+
+async function navegar(enfocar = false) {
+  if (!obtenerToken() || shell.hidden) return;
   const { seccion, id, params } = leerHash();
-  document
-    .querySelectorAll(".lateral nav a")
-    .forEach((enlace) => enlace.classList.toggle("activo", enlace.dataset.seccion === seccion));
+  document.querySelectorAll(".lateral nav a").forEach((enlace) => {
+    const activo = enlace.dataset.seccion === seccion;
+    enlace.classList.toggle("activo", activo);
+    if (activo) enlace.setAttribute("aria-current", "page");
+    else enlace.removeAttribute("aria-current");
+  });
 
   const vista = rutas[seccion] || rutas.reuniones;
   contenido.replaceChildren(cargando());
@@ -40,8 +69,37 @@ async function navegar() {
   } catch (error) {
     contenido.replaceChildren(errorVisible(error));
   }
+  if (enfocar) contenido.focus({ preventScroll: true });
 }
 
-window.addEventListener("hashchange", navegar);
-window.addEventListener("recargar", navegar);
-navegar();
+async function iniciarAplicacion() {
+  if (!obtenerToken()) {
+    mostrarPantallaAcceso();
+    return;
+  }
+  try {
+    const usuario = await api("/auth/me");
+    mostrarShell(usuario);
+    if (!location.hash) history.replaceState(null, "", "#/reuniones");
+    await navegar(true);
+  } catch (error) {
+    if (error.status === 401) {
+      cerrarSesion();
+      mostrarPantallaAcceso();
+      return;
+    }
+    mostrarShell(null);
+    contenido.replaceChildren(errorVisible(error));
+  }
+}
+
+document.getElementById("cerrar-sesion").addEventListener("click", () => {
+  cerrarSesion();
+  location.hash = "";
+  mostrarPantallaAcceso();
+});
+
+window.addEventListener("hashchange", () => navegar(true));
+window.addEventListener("recargar", () => navegar());
+window.addEventListener("sesion-caducada", mostrarPantallaAcceso);
+iniciarAplicacion();

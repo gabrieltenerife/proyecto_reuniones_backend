@@ -14,7 +14,7 @@ Ejecuta la aplicación contra una base de datos local, con los SQL de `sql/` apl
 | `servicios_de_prueba.py` | Sustituto local de OpenAI (embeddings y respuestas), SMTP y Slack. |
 | `api_local.py` | Arranca la API en `http://127.0.0.1:8000` contra el entorno local. |
 | `semilla.py` | Carga tres reuniones de ejemplo usando los scripts reales de `app/`. |
-| `pruebas/test_integracion.py` | 34 pruebas de integración contra la API y la base de datos reales. |
+| `pruebas/test_integracion.py` | Pruebas de integración HTTP contra la API y la base de datos reales. |
 
 ## Requisitos
 
@@ -28,12 +28,16 @@ Desde la raíz del proyecto:
 ```bash
 python local/preparar.py                                  # una sola vez
 docker compose -f local/docker-compose.yml up -d          # Postgres + PostgREST + nginx
+docker cp sql/005_usuarios_propietarios.sql local-db-1:/tmp/005_usuarios_propietarios.sql
+docker exec local-db-1 psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/005_usuarios_propietarios.sql
 python local/servicios_de_prueba.py                       # en una terminal aparte; déjala abierta
 python local/semilla.py                                   # carga las reuniones de ejemplo
 python local/api_local.py                                 # API en http://127.0.0.1:8000
 ```
 
-Clave de API para el frontend: `local-test-key`. URL: `http://127.0.0.1:8000`.
+URL del backend local: `http://localhost:8000`. Abre `http://localhost:3000` y crea una cuenta desde la pantalla de acceso. La primera cuenta se queda con las reuniones de ejemplo existentes; las demás empiezan con su espacio privado vacío.
+
+Para cargar reuniones de ejemplo en una cuenta ya creada, define `REUNION_OWNER_EMAIL` en `local/.env` y ejecuta `python local/semilla.py` (cada ejecución añade tres ejemplos). El pipeline real `app/main.py` usa el `.env` raíz y las credenciales reales de OpenAI/Supabase.
 
 ## Probar
 

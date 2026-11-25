@@ -36,14 +36,14 @@ def main() -> int:
     meeting_id = int(sys.argv[1])
     response = (
         supabase.table(TABLE_NAME)
-        .select("transcripcion")
+        .select("transcripcion, owner_id")
         .eq("id", meeting_id)
         .single()
         .execute()
     )
     texto = construir_texto_bruto(
         response.data["transcripcion"]["segments"],
-        listar_correcciones(),
+        listar_correcciones(response.data["owner_id"]),
     )
 
     supabase.table(TABLE_NAME).update({"texto_bruto": texto}).eq("id", meeting_id).execute()

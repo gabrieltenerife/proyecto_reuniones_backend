@@ -90,10 +90,11 @@ def decidir_coincidencia(tema: dict, candidatos: list[dict]) -> int | None:
     return None
 
 
-def _buscar_similares(embedding: list[float], meeting_id: int) -> list[dict]:
+def _buscar_similares(embedding: list[float], meeting_id: int, owner_id: str | None) -> list[dict]:
     response = supabase.rpc(
         "buscar_temas_similares",
         {
+            "propietario": owner_id,
             "embedding_consulta": embedding,
             "umbral": UMBRAL_SIMILITUD,
             "limite": CANDIDATOS_MAX,
@@ -107,17 +108,28 @@ def _ahora() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _limpiar_reunion(meeting_id: int) -> None:
+def _limpiar_reunion(meeting_id: int, owner_id: str | None) -> None:
     supabase.table(MENCIONES_TABLE).delete().eq("doc_id", meeting_id).execute()
 
-    temas_ids = [fila["id"] for fila in supabase.table(TEMAS_TABLE).select("id").execute().data]
-    con_menciones = {fila["tema_id"] for fila in supabase.table(MENCIONES_TABLE).select("tema_id").execute().data}
+    consulta = supabase.table(TEMAS_TABLE).select("id")
+    consulta = consulta.is_("owner_id", "null") if owner_id is None else consulta.eq("owner_id", owner_id)
+    temas_ids = [fila["id"] for fila in consulta.execute().data]
+    con_menciones = set()
+    if temas_ids:
+        con_menciones = {
+            fila["tema_id"]
+            for fila in supabase.table(MENCIONES_TABLE)
+            .select("tema_id")
+            .in_("tema_id", temas_ids)
+            .execute()
+            .data
+        }
     huerfanos = [tema_id for tema_id in temas_ids if tema_id not in con_menciones]
     if huerfanos:
         supabase.table(TEMAS_TABLE).delete().in_("id", huerfanos).execute()
 
 
-def _crear_tema(tema: dict, embedding: list[float]) -> int:
+def _crear_tema(tema: dict, embedding: list[float], owner_id: str | None) -> int:
     response = (
         supabase.table(TEMAS_TABLE)
         .insert(
@@ -126,6 +138,7 @@ def _crear_tema(tema: dict, embedding: list[float]) -> int:
                 "descripcion": tema["descripcion"],
                 "estado": tema["estado"],
                 "embedding": embedding,
+                "owner_id": owner_id,
             }
         )
         .execute()
@@ -133,28 +146,35 @@ def _crear_tema(tema: dict, embedding: list[float]) -> int:
     return response.data[0]["id"]
 
 
-def extraer_temas_reunion(meeting_id: int, transcripcion: dict, correcciones=()) -> int:
+def extraer_temas_reunion(
+    meeting_id: int,
+    transcripcion: dict,
+    correcciones=(),
+    owner_id: str | None = None,
+) -> int:
     fragmentos = construir_fragmentos(transcripcion["segments"], correcciones)
     extraidos = extraer_temas_de_fragmentos(fragmentos) if fragmentos else []
     embeddings = generar_embeddings([f"{tema['titulo']}. {tema['descripcion']}" for tema in extraidos])
 
-    _limpiar_reunion(meeting_id)
+    _limpiar_reunion(meeting_id, owner_id)
 
     for tema, embedding in zip(extraidos, embeddings):
         indice = min(max(tema["fragmento"], 1), len(fragmentos)) - 1
         minuto = fragmentos[indice]["inicio"]
 
         tema_id = None
-        candidatos = _buscar_similares(embedding, meeting_id)
+        candidatos = _buscar_similares(embedding, meeting_id, owner_id)
         if candidatos:
             tema_id = decidir_coincidencia(tema, candidatos)
 
         if tema_id is None:
-            tema_id = _crear_tema(tema, embedding)
+            tema_id = _crear_tema(tema, embedding, owner_id)
         else:
-            supabase.table(TEMAS_TABLE).update(
+            consulta = supabase.table(TEMAS_TABLE).update(
                 {"estado": tema["estado"], "updated_at": _ahora()}
-            ).eq("id", tema_id).execute()
+            ).eq("id", tema_id)
+            consulta = consulta.is_("owner_id", "null") if owner_id is None else consulta.eq("owner_id", owner_id)
+            consulta.execute()
 
         supabase.table(MENCIONES_TABLE).insert(
             {
@@ -206,11 +226,16 @@ def _formatear_tema(tema: dict, menciones: list[dict], fechas: dict, hoy: date) 
     }
 
 
-def _cargar_temas(estado: str | None = None, tema_ids: list[int] | None = None) -> list[dict]:
+def _cargar_temas(
+    owner_id: str | None,
+    estado: str | None = None,
+    tema_ids: list[int] | None = None,
+) -> list[dict]:
     if tema_ids is not None and not tema_ids:
         return []
 
     consulta = supabase.table(TEMAS_TABLE).select("id, titulo, descripcion, estado")
+    consulta = consulta.is_("owner_id", "null") if owner_id is None else consulta.eq("owner_id", owner_id)
     if estado:
         consulta = consulta.eq("estado", estado)
     if tema_ids is not None:
@@ -238,16 +263,16 @@ def _cargar_temas(estado: str | None = None, tema_ids: list[int] | None = None) 
     return formateados
 
 
-def listar_temas(estado: str | None = None) -> list[dict]:
-    return _cargar_temas(estado=estado)
+def listar_temas(owner_id: str | None, estado: str | None = None) -> list[dict]:
+    return _cargar_temas(owner_id, estado=estado)
 
 
-def detalle_tema(tema_id: int) -> dict | None:
-    temas = _cargar_temas(tema_ids=[tema_id])
+def detalle_tema(owner_id: str | None, tema_id: int) -> dict | None:
+    temas = _cargar_temas(owner_id, tema_ids=[tema_id])
     return temas[0] if temas else None
 
 
-def temas_de_reunion(meeting_id: int) -> list[dict]:
+def temas_de_reunion(meeting_id: int, owner_id: str | None) -> list[dict]:
     menciones = (
         supabase.table(MENCIONES_TABLE)
         .select("tema_id, estado, minuto")
@@ -256,7 +281,7 @@ def temas_de_reunion(meeting_id: int) -> list[dict]:
         .data
     )
     actuales = {m["tema_id"]: m for m in menciones}
-    temas = _cargar_temas(tema_ids=list(actuales))
+    temas = _cargar_temas(owner_id, tema_ids=list(actuales))
 
     for tema in temas:
         actual = actuales[tema["id"]]
@@ -266,13 +291,14 @@ def temas_de_reunion(meeting_id: int) -> list[dict]:
     return temas
 
 
-def actualizar_estado_tema(tema_id: int, estado: str) -> bool:
+def actualizar_estado_tema(tema_id: int, estado: str, owner_id: str | None) -> bool:
     if estado not in ESTADOS:
         raise ValueError(f"Estado no válido: {estado}")
-    response = (
+    consulta = (
         supabase.table(TEMAS_TABLE)
         .update({"estado": estado, "updated_at": _ahora()})
         .eq("id", tema_id)
-        .execute()
     )
+    consulta = consulta.is_("owner_id", "null") if owner_id is None else consulta.eq("owner_id", owner_id)
+    response = consulta.execute()
     return bool(response.data)

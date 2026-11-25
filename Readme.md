@@ -1,5 +1,12 @@
 # Backend y aplicación de reuniones
 
+## Cuenta de demostración local
+
+- **Email:** `demo@reuniones.test`
+- **Contraseña:** `Reuniones-Demo-2026!`
+
+Solo para probar el entorno local; no reutilices estas credenciales en producción.
+
 Aplicación para transcribir reuniones, generar resúmenes, consultar reuniones con citas, dar seguimiento a temas abiertos y exportar resultados. La interfaz web está en `fron/`; el backend y sus scripts están en `app/`.
 
 Para orientarte rápido: `app/README.md` explica los módulos del backend, `fron/README.md` explica cómo iniciar la interfaz, `sql/README.md` documenta las migraciones y `local/README.md` explica el entorno local reproducible.
@@ -64,8 +71,9 @@ python -m pip install -r requirements.txt
     OPENAI_API_KEY=tu_clave_de_api
     SUPABASE_URL=https://vxagataaejcqsrojdniw.supabase.co
     SUPABASE_SECRET_KEY=tu_clave_secreta_nueva
-    API_KEY_FRONT=una_clave_larga_para_el_frontend
+    AUTH_SECRET=un_secreto_aleatorio_de_al_menos_32_caracteres
     CORS_ORIGINS=http://localhost:3000
+    REUNION_OWNER_EMAIL=persona@empresa.com
 
     # Email (opcional). Déjalo vacío si no lo usas.
     SMTP_HOST=smtp.tu-proveedor.com
@@ -86,6 +94,7 @@ python -m pip install -r requirements.txt
     - `sql/002_busqueda_reuniones.sql`: activa pgvector, crea la tabla `fragmentos` y la función `buscar_fragmentos`.
     - `sql/003_temas.sql`: crea las tablas `temas` y `menciones_temas` y la función `buscar_temas_similares`.
     - `sql/004_exportaciones.sql`: crea la tabla `exportaciones`, que guarda el historial de envíos.
+    - `sql/005_usuarios_propietarios.sql`: crea el registro de usuarios y separa los datos por propietario.
 
 5. Si ya tienes reuniones guardadas, indexa las antiguas una vez. Sin argumentos indexa todas; con un ID indexa solo esa reunión:
 
@@ -101,10 +110,10 @@ No compartas ni subas `.env` al repositorio. La clave secreta de Supabase solo d
 Desde la raíz del proyecto, ejecuta:
 
 ```bash
-python app/main.py
+python app/main.py persona@empresa.com
 ```
 
-Al terminar, la fila de la reunión en `Docs` contiene los segmentos, la transcripción completa y el resumen. No se generan archivos de salida locales.
+El email indica a qué cuenta se asigna la nueva reunión. También puedes definir `REUNION_OWNER_EMAIL` en `.env` y ejecutar `python app/main.py`. Al terminar, la fila de la reunión en `Docs` contiene los segmentos, la transcripción completa y el resumen. No se generan archivos de salida locales.
 
 La llamada a la API puede tener coste según tu cuenta y el audio procesado.
 
@@ -128,10 +137,15 @@ Desde la carpeta raíz del proyecto:
 python -m uvicorn api:app --app-dir app --reload
 ```
 
-Todas las rutas requieren la cabecera `X-API-Key` con el valor de `API_KEY_FRONT`.
+`POST /auth/register` crea una cuenta de email/contraseña y `POST /auth/login` inicia sesión. Las demás rutas requieren `Authorization: Bearer <access_token>`. Las contraseñas deben tener al menos 12 caracteres. El token dura 8 horas.
+
+El primer usuario registrado adopta las reuniones y datos heredados que aún no tengan propietario. A partir de entonces, cada cuenta consulta únicamente sus propias reuniones, temas, vocabulario, búsquedas e historial.
 
 | Método | Ruta | Descripción |
 | --- | --- | --- |
+| POST | `/auth/register` | Crea una cuenta y devuelve una sesión |
+| POST | `/auth/login` | Inicia sesión |
+| GET | `/auth/me` | Devuelve la cuenta autenticada |
 | GET | `/tipos` | Tipos de reunión y sus apartados de resumen |
 | GET | `/reuniones` | Lista de reuniones |
 | GET | `/reuniones/{id}` | Detalle: segmentos, transcripción, resumen y tipo |
@@ -162,7 +176,7 @@ Un solo `POST /reuniones/{id}/exportar` envía el resumen de la reunión y, si q
 
 ```bash
 curl -X POST http://localhost:8000/reuniones/12/exportar \
-  -H "X-API-Key: tu_clave" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer tu_token" -H "Content-Type: application/json" \
   -d '{"destino": "email", "destinatarios": ["ana@empresa.com"], "incluir_temas": true}'
 ```
 
@@ -193,7 +207,7 @@ La extracción se ejecuta al final de `main.py`. No se vuelve a ejecutar al edit
 
 ```bash
 curl -X POST http://localhost:8000/preguntas \
-  -H "X-API-Key: tu_clave" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer tu_token" -H "Content-Type: application/json" \
   -d '{"pregunta": "¿qué acordamos con el cliente sobre el presupuesto?", "reuniones": null, "limite": 8}'
 ```
 

@@ -10,39 +10,58 @@ TABLE_NAME = "vocabulario"
 PUNTUACION = ' .,;:!?¿¡"\'()[]'
 
 
-def listar_vocabulario() -> list[dict]:
-    response = (
-        supabase.table(TABLE_NAME)
-        .select("id, termino, variante, created_at")
-        .order("termino")
-        .execute()
-    )
+def _filtrar_propietario(consulta, owner_id: str | None):
+    return consulta.is_("owner_id", "null") if owner_id is None else consulta.eq("owner_id", owner_id)
+
+
+def listar_vocabulario(owner_id: str | None = None) -> list[dict]:
+    consulta = supabase.table(TABLE_NAME).select("id, termino, variante, created_at")
+    response = _filtrar_propietario(consulta, owner_id).order("termino").execute()
     return response.data
 
 
-def listar_terminos() -> list[str]:
-    return sorted({fila["termino"] for fila in listar_vocabulario()})
+def listar_terminos(owner_id: str | None = None) -> list[str]:
+    return sorted({fila["termino"] for fila in listar_vocabulario(owner_id)})
 
 
-def listar_correcciones() -> list[dict]:
-    return [fila for fila in listar_vocabulario() if fila["variante"]]
+def listar_correcciones(owner_id: str | None = None) -> list[dict]:
+    return [fila for fila in listar_vocabulario(owner_id) if fila["variante"]]
 
 
-def guardar_termino(termino: str, variante: str = "") -> dict:
+def guardar_termino(termino: str, variante: str = "", owner_id: str | None = None) -> dict:
     termino = termino.strip()
     variante = variante.strip()
     if not termino:
         raise ValueError("El término no puede estar vacío")
-    response = (
-        supabase.table(TABLE_NAME)
-        .upsert({"termino": termino, "variante": variante}, on_conflict="termino,variante")
-        .execute()
-    )
+    if owner_id is None:
+        consulta = supabase.table(TABLE_NAME).select("id, termino, variante, created_at")
+        existente = (
+            _filtrar_propietario(consulta, None)
+            .eq("termino", termino)
+            .eq("variante", variante)
+            .limit(1)
+            .execute()
+        )
+        if existente.data:
+            return existente.data[0]
+        response = supabase.table(TABLE_NAME).insert(
+            {"termino": termino, "variante": variante}
+        ).execute()
+    else:
+        response = (
+            supabase.table(TABLE_NAME)
+            .upsert(
+                {"owner_id": owner_id, "termino": termino, "variante": variante},
+                on_conflict="owner_id,termino,variante",
+            )
+            .execute()
+        )
     return response.data[0]
 
 
-def eliminar_termino(termino_id: int) -> None:
-    supabase.table(TABLE_NAME).delete().eq("id", termino_id).execute()
+def eliminar_termino(termino_id: int, owner_id: str | None = None) -> None:
+    consulta = supabase.table(TABLE_NAME).delete().eq("id", termino_id)
+    _filtrar_propietario(consulta, owner_id).execute()
 
 
 def reemplazar_palabra(texto: str, buscar: str, reemplazar: str) -> tuple[str, int]:

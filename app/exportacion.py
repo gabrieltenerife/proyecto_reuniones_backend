@@ -67,8 +67,10 @@ def _config_slack() -> str:
     return url
 
 
-def construir_contenido(meeting_id: int, incluir_temas: bool = True) -> Contenido:
-    reunion = obtener_reunion(meeting_id, "id, created_at, tipo, texto_resumido")
+def construir_contenido(
+    meeting_id: int, owner_id: str | None, incluir_temas: bool = True
+) -> Contenido:
+    reunion = obtener_reunion(meeting_id, "id, created_at, tipo, texto_resumido", owner_id)
     if reunion is None:
         raise ExportError("Reunión no encontrada", 404)
     if not (reunion["texto_resumido"] or "").strip():
@@ -79,7 +81,7 @@ def construir_contenido(meeting_id: int, incluir_temas: bool = True) -> Contenid
     return Contenido(
         titulo=f"Resumen de reunión #{meeting_id} · {fecha} · {tipo}",
         resumen=reunion["texto_resumido"].strip(),
-        temas=temas_de_reunion(meeting_id) if incluir_temas else [],
+        temas=temas_de_reunion(meeting_id, owner_id) if incluir_temas else [],
     )
 
 
@@ -167,9 +169,15 @@ def _registrar(meeting_id: int, destino: str, destinatario: str, estado: str, de
     ).execute()
 
 
-def exportar(meeting_id: int, destino: str, destinatarios: list[str] | None = None, incluir_temas: bool = True) -> dict:
+def exportar(
+    meeting_id: int,
+    destino: str,
+    destinatarios: list[str] | None = None,
+    incluir_temas: bool = True,
+    owner_id: str | None = None,
+) -> dict:
     destinatarios = destinatarios or []
-    contenido = construir_contenido(meeting_id, incluir_temas)
+    contenido = construir_contenido(meeting_id, owner_id, incluir_temas)
     etiqueta = ", ".join(destinatarios) if destino == "email" else "canal de Slack"
 
     try:

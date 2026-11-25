@@ -4,24 +4,45 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Reuniones</title>
+    <meta name="theme-color" content="#f5f7fb" />
+    <meta name="description" content="Organiza tus transcripciones, acuerdos y seguimientos de reuniones." />
+    <title>Reuniones · Tu espacio de trabajo</title>
     <link rel="stylesheet" href="css/estilos.css" />
   </head>
   <body>
-    <div class="app">
-      <aside class="lateral">
-        <div class="marca">Reuniones</div>
-        <nav>
-          <a href="#/reuniones" data-seccion="reuniones">Reuniones</a>
-          <a href="#/preguntas" data-seccion="preguntas">Preguntar</a>
-          <a href="#/temas" data-seccion="temas">Temas</a>
-          <a href="#/vocabulario" data-seccion="vocabulario">Vocabulario</a>
-          <a href="#/ajustes" data-seccion="ajustes">Ajustes</a>
+    <a class="salto-contenido" href="#contenido" hidden>Saltar al contenido</a>
+    <div id="acceso" class="acceso" aria-live="polite"></div>
+    <div id="app-shell" class="app" hidden>
+      <aside class="lateral" aria-label="Navegación">
+        <a class="marca" href="#/reuniones" aria-label="Reuniones, inicio">
+          <span class="marca-icono" aria-hidden="true">R</span>
+          <span>Reuniones</span>
+        </a>
+        <p class="nav-etiqueta">ESPACIO PERSONAL</p>
+        <nav aria-label="Secciones principales">
+          <a href="#/reuniones" data-seccion="reuniones"><span aria-hidden="true">▦</span> Reuniones</a>
+          <a href="#/preguntas" data-seccion="preguntas"><span aria-hidden="true">⌕</span> Preguntar</a>
+          <a href="#/temas" data-seccion="temas"><span aria-hidden="true">◉</span> Temas</a>
+          <a href="#/vocabulario" data-seccion="vocabulario"><span aria-hidden="true">Aa</span> Vocabulario</a>
+          <a href="#/ajustes" data-seccion="ajustes"><span aria-hidden="true">⚙</span> Ajustes</a>
         </nav>
+        <div class="perfil">
+          <span class="perfil-avatar" aria-hidden="true" id="perfil-avatar">U</span>
+          <div class="perfil-datos">
+            <span class="perfil-etiqueta">Sesión activa</span>
+            <span id="perfil-email" class="perfil-email"></span>
+          </div>
+          <button id="cerrar-sesion" class="boton-salir" type="button" aria-label="Cerrar sesión" title="Cerrar sesión">↗</button>
+        </div>
       </aside>
-      <main id="contenido" class="contenido"></main>
+      <main id="contenido" class="contenido" tabindex="-1">
+        <div class="barra-superior">
+          <span class="indicador-privado"><span aria-hidden="true"></span> Espacio privado</span>
+        </div>
+        <div id="vista" class="vista"></div>
+      </main>
     </div>
-    <div id="toasts" class="toasts" aria-live="polite"></div>
+    <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
     <script type="module" src="js/app.js"></script>
   </body>
 </html>

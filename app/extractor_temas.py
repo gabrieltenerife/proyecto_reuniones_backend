@@ -9,7 +9,7 @@ from vocabulario import listar_correcciones
 def extraer(meeting_id: int) -> int:
     record = (
         supabase.table(TABLE_NAME)
-        .select("transcripcion")
+        .select("transcripcion, owner_id")
         .eq("id", meeting_id)
         .single()
         .execute()
@@ -17,7 +17,10 @@ def extraer(meeting_id: int) -> int:
     transcripcion = record.data["transcripcion"]
     if not transcripcion or not transcripcion.get("segments"):
         return 0
-    return extraer_temas_reunion(meeting_id, transcripcion, listar_correcciones())
+    owner_id = record.data["owner_id"]
+    return extraer_temas_reunion(
+        meeting_id, transcripcion, listar_correcciones(owner_id), owner_id
+    )
 
 
 def main() -> int:

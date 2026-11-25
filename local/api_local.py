@@ -2,6 +2,7 @@
 
     python local/api_local.py            # http://127.0.0.1:8000
 """
+import os
 import sys
 from pathlib import Path
 
@@ -17,4 +18,9 @@ import api  # noqa: E402
 
 
 if __name__ == "__main__":
-    uvicorn.run(api.app, host="127.0.0.1", port=8000, log_level="warning")
+    uvicorn.run(
+        api.app,
+        host=os.getenv("API_HOST", "127.0.0.1"),
+        port=int(os.getenv("API_PORT", "8000")),
+        log_level="warning",
+    )

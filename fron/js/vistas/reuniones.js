@@ -8,6 +8,7 @@ import {
   formatearMinuto,
   badgeEstado,
   badgesAlerta,
+  cargando,
   vacio,
 } from "../ui.js";
 
@@ -59,7 +60,7 @@ export async function mostrarListado(contenedor) {
       "header",
       { className: "cabecera" },
       h("h1", {}, "Reuniones"),
-      h("span", { className: "subtitulo" }, `${reuniones.length} guardadas`),
+      h("span", { className: "subtitulo" }, `${reuniones.length} reuniones en tu espacio`),
       h("a", { className: "boton secundario", href: "#/preguntas" }, "Preguntar a tus reuniones")
     ),
     reuniones.length === 0
@@ -70,10 +71,16 @@ export async function mostrarListado(contenedor) {
           h(
             "table",
             { className: "tabla" },
+            h("caption", { className: "solo-lectores" }, "Reuniones guardadas en tu espacio"),
             h(
               "thead",
               {},
-              h("tr", {}, h("th", {}, "Reunión"), h("th", {}, "Fecha"), h("th", {}, "Tipo"), h("th", {}))
+              h("tr", {},
+                h("th", { scope: "col" }, "Reunión"),
+                h("th", { scope: "col" }, "Fecha"),
+                h("th", { scope: "col" }, "Tipo"),
+                h("th", { scope: "col" }, "Acciones")
+              )
             ),
             h(
               "tbody",
@@ -88,7 +95,11 @@ export async function mostrarListado(contenedor) {
                   h(
                     "td",
                     { className: "derecha" },
-                    h("a", { className: "boton secundario pequeno", href: `#/reuniones/${reunion.id}` }, "Abrir")
+                    h("a", {
+                      className: "boton secundario pequeno",
+                      href: `#/reuniones/${reunion.id}`,
+                      "aria-label": `Abrir reunión ${reunion.id}`,
+                    }, "Abrir")
                   )
                 )
               )
@@ -100,18 +111,18 @@ export async function mostrarListado(contenedor) {
 
 export async function mostrarDetalle(contenedor, id, params) {
   const [reunion, tipos] = await Promise.all([api(`/reuniones/${id}`), obtenerTipos()]);
-  const pestana = params.get("tab") || "transcripcion";
+  const pestanaSolicitada = params.get("tab") || "transcripcion";
+  let pestanaActiva = Math.max(0, PESTANAS.findIndex(([clave]) => clave === pestanaSolicitada));
   const minutoParam = params.get("min");
   const minuto = minutoParam === null ? null : Number(minutoParam);
 
-  const paneles = {
+  const cargarPanel = {
     transcripcion: () => panelTranscripcion(id, reunion, minuto),
     resumen: () => panelResumen(id, reunion, tipos),
     temas: () => panelTemas(id),
     exportar: () => panelExportar(id),
     versiones: () => panelVersiones(id),
   };
-  const cuerpo = await (paneles[pestana] || paneles.transcripcion)();
 
   const indexar = h(
     "button",
@@ -133,6 +144,149 @@ export async function mostrarDetalle(contenedor, id, params) {
     "Reindexar búsqueda"
   );
 
+  const indicadorPestana = h("span", {
+    className: "indicador-pestana",
+    "aria-hidden": "true",
+  });
+  const pestanas = h(
+    "nav",
+    { className: "pestanas", role: "tablist", "aria-label": "Secciones de la reunión" },
+    PESTANAS.map(([clave, texto], indice) =>
+      h(
+        "button",
+        {
+          id: `pestana-${clave}`,
+          type: "button",
+          role: "tab",
+          className: indice === pestanaActiva ? "activa" : "",
+          "aria-selected": indice === pestanaActiva ? "true" : "false",
+          "aria-controls": `panel-${clave}`,
+          tabindex: indice === pestanaActiva ? 0 : -1,
+          onclick: () => seleccionar(indice, true),
+          onkeydown: (evento) => {
+            let siguiente = null;
+            if (evento.key === "ArrowRight") siguiente = (indice + 1) % PESTANAS.length;
+            if (evento.key === "ArrowLeft") siguiente = (indice - 1 + PESTANAS.length) % PESTANAS.length;
+            if (evento.key === "Home") siguiente = 0;
+            if (evento.key === "End") siguiente = PESTANAS.length - 1;
+            if (siguiente !== null) {
+              evento.preventDefault();
+              seleccionar(siguiente, true);
+            }
+          },
+        },
+        texto
+      )
+    ),
+    indicadorPestana
+  );
+
+  const slides = PESTANAS.map(([clave], indice) =>
+    h(
+      "section",
+      {
+        id: `panel-${clave}`,
+        className: "panel-slide",
+        role: "tabpanel",
+        "aria-labelledby": `pestana-${clave}`,
+        "aria-hidden": indice === pestanaActiva ? "false" : "true",
+        tabindex: 0,
+      },
+      indice === pestanaActiva ? cargando() : null
+    )
+  );
+  const track = h("div", { className: "panel-track" }, slides);
+  track.style.transform = `translate3d(${pestanaActiva * 100}%, 0, 0)`;
+  const viewport = h("div", { className: "panel-viewport" }, track);
+  const cargados = new Set();
+  const cargandoPaneles = new Set();
+
+  function posicionarIndicador() {
+    const boton = pestanas.querySelectorAll('[role="tab"]')[pestanaActiva];
+    indicadorPestana.style.width = `${boton.offsetWidth}px`;
+    indicadorPestana.style.transform = `translateX(${boton.offsetLeft}px)`;
+  }
+
+  function ajustarAltura(indice) {
+    viewport.style.height = `${slides[indice].scrollHeight}px`;
+  }
+
+  async function cargar(indice) {
+    if (cargados.has(indice) || cargandoPaneles.has(indice)) return;
+    cargandoPaneles.add(indice);
+    const [clave] = PESTANAS[indice];
+    const slide = slides[indice];
+    slide.replaceChildren(cargando(`Cargando ${PESTANAS[indice][1].toLowerCase()}…`));
+    try {
+      slide.replaceChildren(await cargarPanel[clave]());
+      cargados.add(indice);
+      if (indice === pestanaActiva) requestAnimationFrame(() => ajustarAltura(indice));
+      if (clave === "transcripcion" && minuto !== null) {
+        slide.querySelector(".resaltado")?.scrollIntoView({ block: "center" });
+      }
+    } catch (error) {
+      slide.replaceChildren(
+        h("div", { className: "error", role: "alert" }, error.message),
+        h(
+          "button",
+          {
+            type: "button",
+            className: "boton secundario",
+            onclick: () => cargar(indice),
+          },
+          "Volver a intentar"
+        )
+      );
+    } finally {
+      cargandoPaneles.delete(indice);
+    }
+  }
+
+  function actualizarDireccion(clave) {
+    const consulta = new URLSearchParams({ tab: clave });
+    if (clave === "transcripcion" && params.has("min")) {
+      consulta.set("min", params.get("min"));
+    }
+    history.replaceState(null, "", `#/reuniones/${id}?${consulta}`);
+  }
+
+  function seleccionar(indice, enfocar = false) {
+    pestanaActiva = indice;
+    const claveActiva = PESTANAS[indice][0];
+    pestanas.querySelectorAll('[role="tab"]').forEach((boton, posicion) => {
+      const activa = posicion === indice;
+      boton.classList.toggle("activa", activa);
+      boton.setAttribute("aria-selected", String(activa));
+      boton.tabIndex = activa ? 0 : -1;
+    });
+    slides.forEach((slide, posicion) => {
+      const activa = posicion === indice;
+      slide.setAttribute("aria-hidden", String(!activa));
+      slide.inert = !activa;
+    });
+    track.style.transform = `translate3d(${indice * 100}%, 0, 0)`;
+    actualizarDireccion(claveActiva);
+    if (enfocar) pestanas.querySelectorAll('[role="tab"]')[indice].focus();
+    requestAnimationFrame(posicionarIndicador);
+    requestAnimationFrame(() => ajustarAltura(indice));
+    void cargar(indice);
+  }
+
+  function deslizarPorGesto(evento) {
+    if (Math.abs(evento.changedTouches[0].clientX - inicioToque.x) < 55) return;
+    if (Math.abs(evento.changedTouches[0].clientY - inicioToque.y) > 70) return;
+    const direccion = evento.changedTouches[0].clientX < inicioToque.x ? 1 : -1;
+    const siguiente = pestanaActiva + direccion;
+    if (siguiente >= 0 && siguiente < PESTANAS.length) seleccionar(siguiente);
+  }
+
+  const inicioToque = { x: 0, y: 0 };
+  viewport.addEventListener("touchstart", (evento) => {
+    inicioToque.x = evento.changedTouches[0].clientX;
+    inicioToque.y = evento.changedTouches[0].clientY;
+  }, { passive: true });
+  viewport.addEventListener("touchend", deslizarPorGesto, { passive: true });
+
   contenedor.replaceChildren(
     h(
       "header",
@@ -150,23 +304,24 @@ export async function mostrarDetalle(contenedor, id, params) {
       ),
       h("div", { className: "acciones" }, indexar)
     ),
-    h(
-      "nav",
-      { className: "pestanas" },
-      PESTANAS.map(([clave, texto]) =>
-        h(
-          "a",
-          { href: `#/reuniones/${id}?tab=${clave}`, className: clave === pestana ? "activa" : "" },
-          texto
-        )
-      )
-    ),
-    cuerpo
+    pestanas,
+    viewport
   );
 
-  if (pestana === "transcripcion" && minuto !== null) {
-    contenedor.querySelector(".resaltado")?.scrollIntoView({ block: "center" });
+  slides.forEach((slide, indice) => { slide.inert = indice !== pestanaActiva; });
+  requestAnimationFrame(posicionarIndicador);
+  if ("ResizeObserver" in window) {
+    const observadorTamano = new ResizeObserver(() => {
+      if (!pestanas.isConnected) {
+        observadorTamano.disconnect();
+        return;
+      }
+      posicionarIndicador();
+    });
+    observadorTamano.observe(pestanas);
   }
+  void cargar(pestanaActiva);
+  requestAnimationFrame(() => ajustarAltura(pestanaActiva));
 }
 
 function indiceDeMinuto(segmentos, minuto) {
@@ -189,8 +344,16 @@ function panelTranscripcion(id, reunion, minuto) {
   const segmentos = reunion.transcripcion?.segments || [];
   const indiceResaltado = minuto === null || !segmentos.length ? -1 : indiceDeMinuto(segmentos, minuto);
 
-  const buscar = h("input", { placeholder: "Texto a corregir, p. ej. cuberneti", required: true });
-  const reemplazar = h("input", { placeholder: "Corregir a, p. ej. Kubernetes", required: true });
+  const buscar = h("input", {
+    "aria-label": "Texto que se va a corregir",
+    placeholder: "Texto a corregir, p. ej. cuberneti",
+    required: true,
+  });
+  const reemplazar = h("input", {
+    "aria-label": "Texto correcto que lo sustituirá",
+    placeholder: "Corregir a, p. ej. Kubernetes",
+    required: true,
+  });
   const recordar = h("input", { type: "checkbox", checked: true });
 
   const correccion = h(
@@ -291,7 +454,11 @@ function filaSegmento(id, segmento, indice, resaltado) {
   }
 
   function editar() {
-    const area = h("textarea", { rows: 3, value: segmento.text });
+    const area = h("textarea", {
+      rows: 3,
+      value: segmento.text,
+      "aria-label": `Texto del segmento ${indice + 1}, hablante ${segmento.speaker}`,
+    });
     const guardar = h(
       "button",
       {
@@ -328,7 +495,7 @@ function filaSegmento(id, segmento, indice, resaltado) {
 function panelResumen(id, reunion, tipos) {
   const selectTipo = h(
     "select",
-    {},
+    { "aria-label": "Tipo de reunión para el resumen" },
     tipos.map((tipo) => h("option", { value: tipo.id }, tipo.nombre))
   );
   selectTipo.value = reunion.tipo;
@@ -341,7 +508,12 @@ function panelResumen(id, reunion, tipos) {
   selectTipo.addEventListener("change", pintarSecciones);
   pintarSecciones();
 
-  const area = h("textarea", { className: "resumen", rows: 18, value: reunion.texto_resumido || "" });
+  const area = h("textarea", {
+    className: "resumen",
+    rows: 18,
+    value: reunion.texto_resumido || "",
+    "aria-label": "Resumen de la reunión",
+  });
 
   const guardar = h(
     "button",
@@ -468,7 +640,11 @@ async function panelExportar(id) {
 
   const destinatarios = [];
   const chips = h("div", { className: "chips" });
-  const campo = h("input", { type: "email", placeholder: "correo@empresa.com (Enter para añadir)" });
+  const campo = h("input", {
+    type: "email",
+    "aria-label": "Correo de la persona destinataria",
+    placeholder: "correo@empresa.com (Enter para añadir)",
+  });
   const incluirTemas = h("input", { type: "checkbox", checked: true });
   const historialBox = h("div", {});
 
@@ -484,6 +660,7 @@ async function panelExportar(id) {
             "button",
             {
               className: "enlace",
+              "aria-label": `Quitar a ${correo} de los destinatarios`,
               onclick: () => {
                 destinatarios.splice(indice, 1);
                 pintarChips();

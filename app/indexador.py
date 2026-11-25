@@ -9,7 +9,7 @@ from vocabulario import listar_correcciones
 def indexar(meeting_id: int) -> int:
     record = (
         supabase.table(TABLE_NAME)
-        .select("transcripcion")
+        .select("transcripcion, owner_id")
         .eq("id", meeting_id)
         .single()
         .execute()
@@ -17,7 +17,11 @@ def indexar(meeting_id: int) -> int:
     transcripcion = record.data["transcripcion"]
     if not transcripcion or not transcripcion.get("segments"):
         return 0
-    return reindexar_reunion(meeting_id, transcripcion, listar_correcciones())
+    return reindexar_reunion(
+        meeting_id,
+        transcripcion,
+        listar_correcciones(record.data["owner_id"]),
+    )
 
 
 def main() -> int:
