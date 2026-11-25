@@ -1,3 +1,4 @@
+// Componentes DOM pequeños, formatos compartidos, estados y notificaciones.
 export function h(etiqueta, propiedades = {}, ...hijos) {
   const elemento = document.createElement(etiqueta);
   for (const [clave, valor] of Object.entries(propiedades)) {

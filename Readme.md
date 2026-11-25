@@ -1,6 +1,8 @@
-# Backend de transcripción de reuniones
+# Backend y aplicación de reuniones
 
-Proyecto en desarrollo para transcribir reuniones, identificar hablantes y generar una transcripción de texto fácil de leer. El flujo actual utiliza la API de OpenAI y está pensado para procesar un archivo de audio por ejecución.
+Aplicación para transcribir reuniones, generar resúmenes, consultar reuniones con citas, dar seguimiento a temas abiertos y exportar resultados. La interfaz web está en `fron/`; el backend y sus scripts están en `app/`.
+
+Para orientarte rápido: `app/README.md` explica los módulos del backend, `fron/README.md` explica cómo iniciar la interfaz, `sql/README.md` documenta las migraciones y `local/README.md` explica el entorno local reproducible.
 
 ## Flujo actual
 
@@ -106,6 +108,18 @@ Al terminar, la fila de la reunión en `Docs` contiene los segmentos, la transcr
 
 La llamada a la API puede tener coste según tu cuenta y el audio procesado.
 
+### Probar en local
+
+Para probar el backend, la base de datos, el frontend y los envíos sin conectar con tu proyecto de Supabase ni llamar a OpenAI, sigue [`local/README.md`](local/README.md). Ahí se explica qué servicios son reales, cuáles son sustitutos de prueba y cómo arrancarlos.
+
+El frontend se ejecuta aparte con:
+
+```bash
+python -m http.server 3000 --directory fron
+```
+
+Después abre `http://localhost:3000`. El mapa de sus pantallas está en [`fron/README.md`](fron/README.md).
+
 ### API
 
 Desde la carpeta raíz del proyecto:
@@ -193,36 +207,21 @@ Los hablantes aparecen como `A`, `B`… tal como los etiqueta la transcripción.
 
 ```text
 .
-├── app/
-│   ├── main.py             # Ejecuta el flujo completo
-│   ├── database.py         # Conexión a Supabase
-│   ├── transcriptor.py     # Audio a segmentos y los inserta en Supabase
-│   ├── unificador.py       # Agrupa segmentos y actualiza Supabase
-│   ├── resume.py           # Genera y guarda el resumen en Supabase
-│   ├── plantillas.py       # Tipos de reunión y sus apartados de resumen
-│   ├── vocabulario.py      # Términos propios y correcciones aprendidas
-│   ├── edicion.py          # Historial de versiones de transcripción y resumen
-│   ├── fragmentos.py       # Trozos de reunión por minuto y sus embeddings
-│   ├── indexador.py        # Indexa reuniones para la búsqueda
-│   ├── rag.py              # Responde preguntas citando reunión y minuto
-│   ├── temas.py            # Temas entre reuniones y su seguimiento
-│   ├── extractor_temas.py  # Extrae temas de las reuniones
-│   ├── exportacion.py      # Envía el resumen por email o Slack
-│   └── api.py              # API FastAPI para el frontend
-├── sql/
-│   ├── 001_plantillas_versiones_vocabulario.sql
-│   ├── 002_busqueda_reuniones.sql
-│   ├── 003_temas.sql
-│   └── 004_exportaciones.sql
-├── data/                   # Archivos locales; excluidos de Git
+├── app/                    # Backend Python; mapa de módulos en app/README.md
+├── fron/                   # Interfaz web; instrucciones en fron/README.md
+├── sql/                    # Migraciones numeradas; guía en sql/README.md
+├── local/                  # Docker, servicios de prueba y pruebas de integración
+│   ├── init/               # Esquema base del entorno local
+│   └── pruebas/            # Pruebas HTTP contra Postgres/PostgREST locales
+├── data/                   # Audio de entrada local; excluido de Git
 │   └── input/
-│       └── reunion.mp3
-├── fron/                   # Frontend web (ver fron/README.md)
-├── .env                    # Claves de API; no debe subirse
-├── requirements.txt
-└── README.md
+├── requirements.txt        # Dependencias Python del backend
+├── .env                    # Credenciales remotas; no subir a Git
+└── Readme.md               # Guía general y documentación de la API
 ```
+
+Los módulos de `app/` permanecen en una sola carpeta porque los scripts se ejecutan directamente y se importan entre sí. Su agrupación por responsabilidad está explicada en `app/README.md`; así se mantiene la estructura fácil de buscar sin cambiar los comandos ni el funcionamiento.
 
 ## Estado del proyecto
 
-El flujo básico está en desarrollo y puede ampliarse. La estructura y este documento describen el comportamiento actual; futuras mejoras pueden incorporar opciones de entrada, pruebas automatizadas y soporte para procesar varias reuniones.
+El backend ofrece transcripción, resúmenes por plantilla, edición con historial, búsqueda RAG con citas, memoria de temas y exportación por email y Slack. La interfaz web está en `fron/`. El entorno local reproducible y sus pruebas de integración están documentados en `local/README.md`.

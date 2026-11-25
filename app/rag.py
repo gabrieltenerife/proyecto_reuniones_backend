@@ -1,3 +1,5 @@
+"""Recupera fragmentos relevantes y responde preguntas con citas verificables."""
+
 import re
 
 from database import TABLE_NAME, supabase

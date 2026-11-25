@@ -1,3 +1,5 @@
+"""CLI para extraer y guardar los temas de una reunión o de todas las reuniones."""
+
 import sys
 from database import TABLE_NAME, supabase
 from temas import extraer_temas_reunion

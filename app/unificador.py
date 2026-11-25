@@ -1,3 +1,5 @@
+"""Agrupa los segmentos por hablante y actualiza el texto legible de la reunión."""
+
 import sys
 from database import TABLE_NAME, supabase
 from vocabulario import aplicar_correcciones, listar_correcciones

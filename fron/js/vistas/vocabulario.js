@@ -1,3 +1,4 @@
+// Administración de nombres, siglas, términos técnicos y variantes transcritas.
 import { api } from "../api.js";
 import { h, toast, formatearFecha, vacio } from "../ui.js";
 

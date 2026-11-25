@@ -1,3 +1,5 @@
+"""Lectura de reuniones y persistencia del historial de transcripciones y resúmenes."""
+
 from database import TABLE_NAME, supabase
 
 

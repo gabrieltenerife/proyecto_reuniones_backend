@@ -1,3 +1,4 @@
+// Listado y detalle de reuniones: transcripción, resumen, temas, exportación e historial.
 import { api } from "../api.js";
 import {
   h,

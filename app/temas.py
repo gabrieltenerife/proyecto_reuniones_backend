@@ -1,3 +1,5 @@
+"""Detecta temas, los relaciona entre reuniones y calcula su memoria y estado."""
+
 import json
 from datetime import date, datetime, timezone
 

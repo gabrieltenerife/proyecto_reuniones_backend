@@ -1,3 +1,5 @@
+"""CLI para indexar una reunión o reconstruir el índice de todas las reuniones."""
+
 import sys
 from database import TABLE_NAME, supabase
 from fragmentos import reindexar_reunion

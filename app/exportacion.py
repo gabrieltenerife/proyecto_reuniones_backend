@@ -1,3 +1,5 @@
+"""Prepara y envía resúmenes por email o Slack, y registra cada intento."""
+
 import json
 import os
 import re

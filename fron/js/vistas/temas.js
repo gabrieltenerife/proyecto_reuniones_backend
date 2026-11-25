@@ -1,3 +1,4 @@
+// Lista y detalle de temas abiertos, con alertas y seguimiento entre reuniones.
 import { api } from "../api.js";
 import {
   h,

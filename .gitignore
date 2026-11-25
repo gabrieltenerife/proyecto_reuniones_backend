@@ -1,3 +1,4 @@
+# Secretos, datos locales, cachés de Python y archivos generados que no van a Git.
 /.env
 /extraccion
 /app/__pycache__/

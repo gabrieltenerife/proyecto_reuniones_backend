@@ -1,3 +1,4 @@
+// Vista de configuración de la API y comprobación de conectividad.
 import { api, guardarAjustes, obtenerAjustes } from "../api.js";
 import { h, toast } from "../ui.js";
 

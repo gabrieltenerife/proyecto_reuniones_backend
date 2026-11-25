@@ -1,3 +1,5 @@
+"""Genera el resumen de una reunión con su plantilla y lo guarda en Supabase."""
+
 from dotenv import load_dotenv
 from openai import OpenAI
 from pathlib import Path

@@ -1,3 +1,5 @@
+"""API HTTP: reuniones, chat RAG, temas, vocabulario, edición y exportaciones."""
+
 import os
 import re
 import secrets

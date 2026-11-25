@@ -1,3 +1,5 @@
+"""Orquesta el pipeline: transcribir, unificar, resumir, indexar y extraer temas."""
+
 import subprocess
 import sys
 from pathlib import Path

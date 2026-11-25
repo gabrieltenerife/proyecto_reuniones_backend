@@ -1,3 +1,5 @@
+"""Administra términos propios y aplica las correcciones aprendidas al texto."""
+
 import difflib
 import re
 

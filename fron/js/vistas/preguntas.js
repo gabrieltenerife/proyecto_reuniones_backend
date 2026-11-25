@@ -1,3 +1,4 @@
+// Chat RAG: preguntas, fuentes citadas y enlaces al minuto de la transcripción.
 import { api } from "../api.js";
 import { h, toast, formatearFecha, formatearMinuto, vacio, cargando } from "../ui.js";
 

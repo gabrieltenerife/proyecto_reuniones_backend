@@ -1,3 +1,4 @@
+// Enrutador de la aplicación: interpreta el hash y carga cada vista.
 import { h, errorVisible, cargando } from "./ui.js";
 import { mostrarListado, mostrarDetalle } from "./vistas/reuniones.js";
 import { mostrarPreguntas } from "./vistas/preguntas.js";

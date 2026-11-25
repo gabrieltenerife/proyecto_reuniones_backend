@@ -1,3 +1,4 @@
+// Cliente HTTP común: URL, clave local/remota y errores de la API.
 const CLAVE_AJUSTES = "reuniones.ajustes";
 const URL_POR_DEFECTO = "http://localhost:8000";
 const CLAVE_LOCAL = "local-test-key";

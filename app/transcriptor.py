@@ -1,3 +1,5 @@
+"""Transcribe el audio de entrada, conserva hablantes y tiempos, e inserta segmentos."""
+
 from dotenv import load_dotenv
 from openai import OpenAI
 from pathlib import Path

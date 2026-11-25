@@ -1,3 +1,5 @@
+"""Divide transcripciones en fragmentos y crea o actualiza sus embeddings."""
+
 import os
 
 from openai import OpenAI

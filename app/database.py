@@ -1,3 +1,5 @@
+"""Carga las credenciales del backend y crea el cliente compartido de Supabase."""
+
 from dotenv import load_dotenv
 from pathlib import Path
 from supabase import create_client

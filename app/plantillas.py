@@ -1,3 +1,5 @@
+"""Define los tipos de reunión y construye las instrucciones para sus resúmenes."""
+
 REGLAS_RESUMEN = (
     "Analiza la transcripción de una reunión y responde en español. "
     "No inventes información: si no se indica responsable o fecha, escribe "
