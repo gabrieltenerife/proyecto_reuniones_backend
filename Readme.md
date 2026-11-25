@@ -15,6 +15,12 @@ app/transcriptor.py ──► Docs.transcripcion
                               │
                               ▼
                           app/resume.py ──► Docs.texto_resumido
+                               │
+                               ▼
+                        app/indexador.py ──► fragmentos (búsqueda)
+                               │
+                               ▼
+                    app/extractor_temas.py ──► temas (seguimiento)
 ```
 
 `app/main.py` ejecuta los pasos en orden. Cada resultado se envía a Supabase al terminar; los scripts no guardan los resultados en archivos locales. El audio permanece en `data/input` y no se sube a Supabase.
@@ -44,7 +50,7 @@ source .venv/bin/activate
 Instala las dependencias:
 
 ```bash
-python -m pip install openai python-dotenv supabase
+python -m pip install -r requirements.txt
 ```
 
 ## Configuración
@@ -56,9 +62,35 @@ python -m pip install openai python-dotenv supabase
     OPENAI_API_KEY=tu_clave_de_api
     SUPABASE_URL=https://vxagataaejcqsrojdniw.supabase.co
     SUPABASE_SECRET_KEY=tu_clave_secreta_nueva
+    API_KEY_FRONT=una_clave_larga_para_el_frontend
+    CORS_ORIGINS=http://localhost:3000
+
+    # Email (opcional). Déjalo vacío si no lo usas.
+    SMTP_HOST=smtp.tu-proveedor.com
+    SMTP_PORT=587
+    SMTP_USER=usuario
+    SMTP_PASSWORD=clave
+    SMTP_FROM=Reuniones <reuniones@tu-dominio.com>
+    SMTP_STARTTLS=true
+
+    # Slack (opcional): URL de un webhook entrante
+    SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
     ```
 
 3. Coloca el audio que quieres procesar en `data/input/reunion.mp3`. Crea la carpeta `data/input` si todavía no existe.
+
+4. Ejecuta en el SQL Editor de Supabase, en este orden:
+    - `sql/001_plantillas_versiones_vocabulario.sql`: añade la columna `tipo` a `Docs` y crea las tablas `versiones` y `vocabulario`.
+    - `sql/002_busqueda_reuniones.sql`: activa pgvector, crea la tabla `fragmentos` y la función `buscar_fragmentos`.
+    - `sql/003_temas.sql`: crea las tablas `temas` y `menciones_temas` y la función `buscar_temas_similares`.
+    - `sql/004_exportaciones.sql`: crea la tabla `exportaciones`, que guarda el historial de envíos.
+
+5. Si ya tienes reuniones guardadas, indexa las antiguas una vez. Sin argumentos indexa todas; con un ID indexa solo esa reunión:
+
+    ```bash
+    python app/indexador.py
+    python app/indexador.py 12
+    ```
 
 No compartas ni subas `.env` al repositorio. La clave secreta de Supabase solo debe usarse en este backend y mantenerse privada. El audio se envía a OpenAI para su transcripción, pero no se guarda en Supabase.
 
@@ -74,6 +106,89 @@ Al terminar, la fila de la reunión en `Docs` contiene los segmentos, la transcr
 
 La llamada a la API puede tener coste según tu cuenta y el audio procesado.
 
+### API
+
+Desde la carpeta raíz del proyecto:
+
+```bash
+python -m uvicorn api:app --app-dir app --reload
+```
+
+Todas las rutas requieren la cabecera `X-API-Key` con el valor de `API_KEY_FRONT`.
+
+| Método | Ruta | Descripción |
+| --- | --- | --- |
+| GET | `/tipos` | Tipos de reunión y sus apartados de resumen |
+| GET | `/reuniones` | Lista de reuniones |
+| GET | `/reuniones/{id}` | Detalle: segmentos, transcripción, resumen y tipo |
+| PATCH | `/reuniones/{id}/segmentos/{indice}` | Corrige un segmento. Devuelve sugerencias de vocabulario |
+| POST | `/reuniones/{id}/correcciones` | Cambia un texto en toda la reunión y, si `recordar` es `true`, lo guarda en el vocabulario |
+| PUT | `/reuniones/{id}/resumen` | Edita el resumen a mano |
+| POST | `/reuniones/{id}/resumen/regenerar` | Regenera el resumen con un `tipo` opcional |
+| GET | `/reuniones/{id}/versiones` | Historial de cambios de transcripción y resumen |
+| POST | `/reuniones/{id}/versiones/{version_id}/restaurar` | Restaura una versión anterior |
+| GET, POST | `/vocabulario` | Lista o añade términos y variantes |
+| DELETE | `/vocabulario/{id}` | Elimina un término |
+| POST | `/preguntas` | Pregunta a tus reuniones. Devuelve respuesta y fuentes con reunión y minuto |
+| POST | `/reuniones/{id}/indexar` | Vuelve a indexar una reunión para la búsqueda |
+| GET | `/temas?estado=abierto` | Temas detectados en todas las reuniones, con antigüedad y alertas |
+| GET | `/temas/{id}` | Detalle de un tema con todas sus menciones |
+| PATCH | `/temas/{id}` | Cambia el estado de un tema (`abierto`, `resuelto`, `pospuesto`) |
+| GET | `/reuniones/{id}/temas` | Temas tratados en una reunión, con su historial previo |
+| POST | `/reuniones/{id}/temas/extraer` | Vuelve a extraer los temas de una reunión |
+| GET | `/destinos` | Destinos de exportación y si ya están configurados |
+| POST | `/reuniones/{id}/exportar` | Envía el resumen por `email` o `slack`, con sus temas |
+| GET | `/reuniones/{id}/exportaciones` | Historial de envíos de una reunión, con errores |
+
+El vocabulario se aplica al texto completo al regenerarlo y se incluye en las instrucciones del resumen para que use la grafía correcta.
+
+### Exportar y enviar
+
+Un solo `POST /reuniones/{id}/exportar` envía el resumen de la reunión y, si quieres, sus temas con el historial de cada uno.
+
+```bash
+curl -X POST http://localhost:8000/reuniones/12/exportar \
+  -H "X-API-Key: tu_clave" -H "Content-Type: application/json" \
+  -d '{"destino": "email", "destinatarios": ["ana@empresa.com"], "incluir_temas": true}'
+```
+
+- **Email**: envío por SMTP con STARTTLS (configurable). Hace falta `SMTP_HOST` y `SMTP_FROM`. Si el servidor exige login, añade `SMTP_USER` y `SMTP_PASSWORD`. Con Gmail u Outlook usa una contraseña de aplicación, no la contraseña normal.
+- **Slack**: publica en el canal del webhook entrante (`SLACK_WEBHOOK_URL`). Los `**negritas**` del resumen se convierten al formato de Slack, y los mensajes muy largos se recortan con aviso.
+
+Cada intento queda registrado en `GET /reuniones/{id}/exportaciones`, tanto si sale bien como si falla, con el motivo del error. `GET /destinos` indica qué destinos están configurados, para que la interfaz muestre solo los disponibles.
+
+Para añadir otros destinos (Notion, Trello, Todoist, Google Docs...) basta con una función `enviar_*` en `app/exportacion.py` y añadirla al `if` de `exportar`.
+
+### Memoria de temas
+
+Después de cada reunión, el sistema extrae sus temas (decisiones, preguntas abiertas, bloqueos, compromisos y temas aplazados), con un estado (`abierto`, `resuelto` o `pospuesto`) y el minuto donde se tratan. Para cada tema busca temas anteriores parecidos, con embeddings. Si encuentra candidatos, el modelo decide si es el mismo asunto. Si no, crea un tema nuevo. Así un tema que aparece en varias reuniones queda como un solo seguimiento con varias menciones.
+
+En `GET /temas` cada tema incluye:
+
+- `veces_mencionado`, `primera_mencion` y `ultima_mencion`, con reunión, fecha y minuto.
+- `dias_desde_primera`: días desde la primera vez que se trató.
+- `alertas`:
+  - `recurrente`: aparece en dos o más reuniones y sigue sin resolverse.
+  - `antiguo`: lleva 14 días o más sin resolverse.
+
+Si un tema se resuelve en la última reunión, la alerta desaparece. Puedes cambiar el estado a mano con `PATCH /temas/{id}`.
+
+La extracción se ejecuta al final de `main.py`. No se vuelve a ejecutar al editar una transcripción; para eso usa `POST /reuniones/{id}/temas/extraer` o `python app/extractor_temas.py <id>`. Las reuniones antiguas se procesan con `python app/extractor_temas.py`, sin argumentos.
+
+### Preguntar a tus reuniones
+
+```bash
+curl -X POST http://localhost:8000/preguntas \
+  -H "X-API-Key: tu_clave" -H "Content-Type: application/json" \
+  -d '{"pregunta": "¿qué acordamos con el cliente sobre el presupuesto?", "reuniones": null, "limite": 8}'
+```
+
+La respuesta incluye `respuesta` y `fuentes`. Cada fuente tiene `reunion_id`, `reunion_fecha`, `minuto` (por ejemplo `14:32`), `hablante` y `texto`. En el texto, `[1]`, `[2]`… se refieren a esas fuentes. Las fuentes las genera el sistema a partir de los fragmentos recuperados, así que el minuto no lo inventa el modelo.
+
+Cada fragmento agrupa intervenciones consecutivas del mismo hablante, de hasta 60 segundos y 800 caracteres. La búsqueda combina similitud semántica (embeddings `text-embedding-3-small`) con búsqueda por palabras clave en español, y se fusionan los resultados. Un cambio en la transcripción o una corrección vuelve a indexar la reunión automáticamente.
+
+Los hablantes aparecen como `A`, `B`… tal como los etiqueta la transcripción.
+
 ## Estructura
 
 ```text
@@ -83,11 +198,28 @@ La llamada a la API puede tener coste según tu cuenta y el audio procesado.
 │   ├── database.py         # Conexión a Supabase
 │   ├── transcriptor.py     # Audio a segmentos y los inserta en Supabase
 │   ├── unificador.py       # Agrupa segmentos y actualiza Supabase
-│   └── resume.py           # Genera y guarda el resumen en Supabase
+│   ├── resume.py           # Genera y guarda el resumen en Supabase
+│   ├── plantillas.py       # Tipos de reunión y sus apartados de resumen
+│   ├── vocabulario.py      # Términos propios y correcciones aprendidas
+│   ├── edicion.py          # Historial de versiones de transcripción y resumen
+│   ├── fragmentos.py       # Trozos de reunión por minuto y sus embeddings
+│   ├── indexador.py        # Indexa reuniones para la búsqueda
+│   ├── rag.py              # Responde preguntas citando reunión y minuto
+│   ├── temas.py            # Temas entre reuniones y su seguimiento
+│   ├── extractor_temas.py  # Extrae temas de las reuniones
+│   ├── exportacion.py      # Envía el resumen por email o Slack
+│   └── api.py              # API FastAPI para el frontend
+├── sql/
+│   ├── 001_plantillas_versiones_vocabulario.sql
+│   ├── 002_busqueda_reuniones.sql
+│   ├── 003_temas.sql
+│   └── 004_exportaciones.sql
 ├── data/                   # Archivos locales; excluidos de Git
 │   └── input/
 │       └── reunion.mp3
-├── .env                    # Clave de API; no debe subirse
+├── fron/                   # Frontend web (ver fron/README.md)
+├── .env                    # Claves de API; no debe subirse
+├── requirements.txt
 └── README.md
 ```
 

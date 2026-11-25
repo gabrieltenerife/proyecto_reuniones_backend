@@ -1,0 +1,44 @@
+# Stack local: Postgres con pgvector + PostgREST detrás de nginx.
+# nginx expone la API en /rest/v1, igual que Supabase, para que supabase-py funcione sin cambios.
+# Los SQL de ../sql se aplican en orden la primera vez que arranca la base de datos.
+#   docker compose -f local/docker-compose.yml up -d
+#   docker compose -f local/docker-compose.yml down -v   (borra todo y reaplica los SQL)
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "54322:5432"
+    volumes:
+      - ./init/00_base.sql:/docker-entrypoint-initdb.d/00_base.sql:ro
+      - ../sql/001_plantillas_versiones_vocabulario.sql:/docker-entrypoint-initdb.d/01_plantillas_versiones_vocabulario.sql:ro
+      - ../sql/002_busqueda_reuniones.sql:/docker-entrypoint-initdb.d/02_busqueda_reuniones.sql:ro
+      - ../sql/003_temas.sql:/docker-entrypoint-initdb.d/03_temas.sql:ro
+      - ../sql/004_exportaciones.sql:/docker-entrypoint-initdb.d/04_exportaciones.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    image: postgrest/postgrest:v12.2.3
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:authenticator@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+
+  gateway:
+    image: nginx:1.27-alpine
+    depends_on:
+      - api
+    ports:
+      - "54321:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro

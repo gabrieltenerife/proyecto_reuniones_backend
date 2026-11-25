@@ -11,6 +11,8 @@ def main() -> int:
         ROOT_DIR / "app" / "transcriptor.py",
         ROOT_DIR / "app" / "unificador.py",
         ROOT_DIR / "app" / "resume.py",
+        ROOT_DIR / "app" / "indexador.py",
+        ROOT_DIR / "app" / "extractor_temas.py",
     )
 
     meeting_id = None
