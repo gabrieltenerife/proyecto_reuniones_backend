@@ -93,12 +93,27 @@ Al terminar, la misma fila de `Docs` contiene `transcripcion`, `texto_bruto` y `
 
 La llamada a la API puede tener coste según tu cuenta y el audio procesado.
 
+### Preguntar sobre una reunión
+
+Cuando la transcripción esté lista, envía una pregunta como JSON. El endpoint usa `texto_bruto` como contexto y no guarda la pregunta ni la respuesta en nuestra base de datos:
+
+```http
+POST /reuniones/{meeting_id}/preguntar
+X-API-Key: una_clave_larga_aleatoria
+Content-Type: application/json
+
+{"pregunta": "¿Qué tareas se acordaron y quién es responsable?"}
+```
+
+La respuesta tiene el formato `{"id": 123, "pregunta": "...", "respuesta": "..."}`. Devuelve `404` si la reunión no existe, `409` si aún no hay transcripción y `422` si la pregunta está vacía o supera los 2000 caracteres. Se puede configurar el modelo con `OPENAI_QA_MODEL`; por defecto usa `OPENAI_SUMMARY_MODEL` y, como último recurso, `gpt-6-luna`. Cada consulta envía la transcripción a OpenAI y puede generar coste. Para transcripciones muy largas o muchas preguntas, convendría añadir búsqueda por fragmentos (RAG) en lugar de enviar todo el texto en cada solicitud.
+
 ## Estructura
 
 ```text
 .
 ├── app/
-│   ├── api.py              # Endpoint para solicitar el procesamiento
+│   ├── api.py              # Endpoints HTTP
+│   ├── consultas.py        # Preguntas sobre transcripciones
 │   ├── database.py         # Conexión a Supabase
 │   ├── main.py             # Ejecución por línea de comandos
 │   ├── procesador.py       # Descarga, transcripción, resumen y actualización
