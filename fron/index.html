@@ -27,11 +27,13 @@
           <a href="#/ajustes" data-seccion="ajustes"><span aria-hidden="true">⚙</span> Ajustes</a>
         </nav>
         <div class="perfil">
-          <span class="perfil-avatar" aria-hidden="true" id="perfil-avatar">U</span>
-          <div class="perfil-datos">
-            <span class="perfil-etiqueta">Sesión activa</span>
-            <span id="perfil-email" class="perfil-email"></span>
-          </div>
+          <button id="abrir-perfil" class="perfil-abrir" type="button" aria-haspopup="dialog" aria-controls="dialog-perfil">
+            <span class="perfil-avatar" aria-hidden="true" id="perfil-avatar">U</span>
+            <span class="perfil-datos">
+              <span class="perfil-etiqueta">Sesión activa · Perfil</span>
+              <span id="perfil-email" class="perfil-email"></span>
+            </span>
+          </button>
           <button id="cerrar-sesion" class="boton-salir" type="button" aria-label="Cerrar sesión" title="Cerrar sesión">↗</button>
         </div>
       </aside>

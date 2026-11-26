@@ -30,6 +30,8 @@ python local/preparar.py                                  # una sola vez
 docker compose -f local/docker-compose.yml up -d          # Postgres + PostgREST + nginx
 docker cp sql/005_usuarios_propietarios.sql local-db-1:/tmp/005_usuarios_propietarios.sql
 docker exec local-db-1 psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/005_usuarios_propietarios.sql
+docker cp sql/006_perfil_usuarios.sql local-db-1:/tmp/006_perfil_usuarios.sql
+docker exec local-db-1 psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/006_perfil_usuarios.sql
 python local/servicios_de_prueba.py                       # en una terminal aparte; déjala abierta
 python local/semilla.py                                   # carga las reuniones de ejemplo
 python local/api_local.py                                 # API en http://127.0.0.1:8000

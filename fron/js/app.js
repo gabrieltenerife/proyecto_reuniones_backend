@@ -1,7 +1,8 @@
 // Enrutador y puerta de sesión de la aplicación.
 import { api, cerrarSesion, obtenerToken } from "./api.js";
-import { h, errorVisible, cargando } from "./ui.js";
+import { h, errorVisible, cargando, toast } from "./ui.js";
 import { mostrarAcceso } from "./vistas/acceso.js";
+import { abrirPerfil } from "./vistas/perfil.js";
 import { mostrarListado, mostrarDetalle } from "./vistas/reuniones.js";
 import { mostrarPreguntas } from "./vistas/preguntas.js";
 import { mostrarTemas, mostrarTema } from "./vistas/temas.js";
@@ -39,10 +40,15 @@ function mostrarShell(usuario) {
   shell.hidden = false;
   saltoContenido.hidden = false;
   emailPerfil.textContent = usuario?.email || "Cuenta";
-  avatarPerfil.textContent = (usuario?.email?.[0] || "U").toLocaleUpperCase("es-ES");
+  if (usuario?.avatar_url) {
+    avatarPerfil.replaceChildren(h("img", { src: usuario.avatar_url, alt: "" }));
+  } else {
+    avatarPerfil.textContent = (usuario?.email?.[0] || "U").toLocaleUpperCase("es-ES");
+  }
 }
 
 function mostrarPantallaAcceso() {
+  document.getElementById("dialog-perfil")?.close();
   shell.hidden = true;
   saltoContenido.hidden = true;
   mostrarAcceso(acceso, async (usuario) => {
@@ -93,11 +99,21 @@ async function iniciarAplicacion() {
   }
 }
 
-document.getElementById("cerrar-sesion").addEventListener("click", () => {
+function salirDeLaCuenta() {
   cerrarSesion();
   location.hash = "";
   mostrarPantallaAcceso();
+}
+
+document.getElementById("abrir-perfil").addEventListener("click", async () => {
+  try {
+    await abrirPerfil(mostrarShell, salirDeLaCuenta);
+  } catch (error) {
+    toast(error.message, "error");
+  }
 });
+
+document.getElementById("cerrar-sesion").addEventListener("click", salirDeLaCuenta);
 
 window.addEventListener("hashchange", () => navegar(true));
 window.addEventListener("recargar", () => navegar());

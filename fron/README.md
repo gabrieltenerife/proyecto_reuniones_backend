@@ -16,6 +16,7 @@ Interfaz web para el backend de `app/api.py`. Es HTML, CSS y JavaScript sin depe
 - **Vocabulario**: añadir y eliminar términos y variantes.
 - **Ajustes**: URL de la API, prueba de conexión y estado de los destinos de exportación.
 - **Acceso privado**: registro e inicio de sesión con contraseña; cada cuenta queda aislada en el backend.
+- **Perfil**: al pulsar el usuario en la barra lateral puedes actualizar la foto y cambiar la contraseña.
 
 ## Ejecutarlo
 

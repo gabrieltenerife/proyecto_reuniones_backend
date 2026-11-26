@@ -88,7 +88,7 @@ def registrar_usuario(email: str, password: str) -> dict | None:
 def buscar_usuario(email: str) -> dict | None:
     response = (
         supabase.table(USERS_TABLE)
-        .select("id, email, password_hash")
+        .select("id, email, password_hash, avatar_url, token_version")
         .eq("email", normalizar_email(email))
         .limit(1)
         .execute()
@@ -102,6 +102,7 @@ def _token_para(usuario: dict) -> str:
     contenido = {
         "sub": str(usuario["id"]),
         "email": usuario["email"],
+        "ver": int(usuario.get("token_version", 0)),
         "iat": ahora,
         "exp": ahora + TOKEN_TTL_SECONDS,
         "iss": "reuniones-api",
@@ -116,7 +117,11 @@ def crear_sesion(usuario: dict) -> dict:
         "access_token": _token_para(usuario),
         "token_type": "bearer",
         "expires_in": TOKEN_TTL_SECONDS,
-        "usuario": {"id": str(usuario["id"]), "email": usuario["email"]},
+        "usuario": {
+            "id": str(usuario["id"]),
+            "email": usuario["email"],
+            "avatar_url": usuario.get("avatar_url"),
+        },
     }
 
 
@@ -148,11 +153,14 @@ def usuario_actual(authorization: str | None = Header(default=None)) -> dict:
     claims = _decodificar_token(authorization[7:].strip())
     response = (
         supabase.table(USERS_TABLE)
-        .select("id, email")
+        .select("id, email, token_version")
         .eq("id", claims["sub"])
         .limit(1)
         .execute()
     )
     if not response.data:
         raise HTTPException(status_code=401, detail="La cuenta ya no está disponible")
-    return response.data[0]
+    usuario = response.data[0]
+    if int(usuario.get("token_version", 0)) != int(claims.get("ver", -1)):
+        raise HTTPException(status_code=401, detail="La sesión se cerró por un cambio de contraseña")
+    return usuario

@@ -95,6 +95,7 @@ python -m pip install -r requirements.txt
     - `sql/003_temas.sql`: crea las tablas `temas` y `menciones_temas` y la función `buscar_temas_similares`.
     - `sql/004_exportaciones.sql`: crea la tabla `exportaciones`, que guarda el historial de envíos.
     - `sql/005_usuarios_propietarios.sql`: crea el registro de usuarios y separa los datos por propietario.
+    - `sql/006_perfil_usuarios.sql`: habilita la foto de perfil y la revocación de sesiones al cambiar la contraseña.
 
 5. Si ya tienes reuniones guardadas, indexa las antiguas una vez. Sin argumentos indexa todas; con un ID indexa solo esa reunión:
 
@@ -146,6 +147,8 @@ El primer usuario registrado adopta las reuniones y datos heredados que aún no 
 | POST | `/auth/register` | Crea una cuenta y devuelve una sesión |
 | POST | `/auth/login` | Inicia sesión |
 | GET | `/auth/me` | Devuelve la cuenta autenticada |
+| PATCH | `/auth/me` | Actualiza la foto del perfil autenticado |
+| POST | `/auth/change-password` | Cambia la contraseña y revoca las sesiones anteriores |
 | GET | `/tipos` | Tipos de reunión y sus apartados de resumen |
 | GET | `/reuniones` | Lista de reuniones |
 | GET | `/reuniones/{id}` | Detalle: segmentos, transcripción, resumen y tipo |

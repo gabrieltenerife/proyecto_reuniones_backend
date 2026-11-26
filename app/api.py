@@ -1,5 +1,7 @@
 """API HTTP: reuniones, chat RAG, temas, vocabulario, edición y exportaciones."""
 
+import base64
+import binascii
 import os
 import re
 from typing import Literal
@@ -11,6 +13,7 @@ from pydantic import BaseModel, Field, field_validator
 from auth import (
     buscar_usuario,
     crear_sesion,
+    hash_password,
     normalizar_email,
     registrar_usuario,
     usuario_actual,
@@ -95,7 +98,83 @@ def iniciar_sesion(cuenta: Credenciales) -> dict:
 
 @app.get("/auth/me")
 def mi_cuenta(usuario: dict = Depends(usuario_actual)) -> dict:
-    return {"id": str(usuario["id"]), "email": usuario["email"]}
+    perfil = (
+        supabase.table("usuarios")
+        .select("avatar_url")
+        .eq("id", usuario["id"])
+        .limit(1)
+        .execute()
+    )
+    return {
+        "id": str(usuario["id"]),
+        "email": usuario["email"],
+        "avatar_url": perfil.data[0]["avatar_url"] if perfil.data else None,
+    }
+
+
+class PerfilActualizado(BaseModel):
+    avatar_url: str | None = Field(max_length=350_000)
+
+    @field_validator("avatar_url")
+    @classmethod
+    def validar_avatar(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return None
+        prefijo = "data:image/jpeg;base64,"
+        if not valor.startswith(prefijo):
+            raise ValueError("La foto debe estar en formato JPEG")
+        try:
+            imagen = base64.b64decode(valor[len(prefijo):], validate=True)
+        except (binascii.Error, ValueError):
+            raise ValueError("La foto no tiene un formato válido") from None
+        if not imagen.startswith(b"\xff\xd8\xff") or len(imagen) > 262_144:
+            raise ValueError("La foto debe ser un JPEG de hasta 256 KB")
+        return valor
+
+
+@app.patch("/auth/me")
+def actualizar_perfil(
+    perfil: PerfilActualizado, usuario: dict = Depends(usuario_actual)
+) -> dict:
+    supabase.table("usuarios").update({"avatar_url": perfil.avatar_url}).eq(
+        "id", usuario["id"]
+    ).execute()
+    return {
+        "id": str(usuario["id"]),
+        "email": usuario["email"],
+        "avatar_url": perfil.avatar_url,
+    }
+
+
+class CambioPassword(BaseModel):
+    password_actual: str = Field(min_length=1, max_length=256)
+    password_nueva: str = Field(min_length=12, max_length=256)
+
+
+@app.post("/auth/change-password")
+def cambiar_password(
+    cambio: CambioPassword, usuario: dict = Depends(usuario_actual)
+) -> dict:
+    registro = (
+        supabase.table("usuarios")
+        .select("password_hash, token_version")
+        .eq("id", usuario["id"])
+        .limit(1)
+        .execute()
+    )
+    if not registro.data or not verificar_password(
+        cambio.password_actual, registro.data[0]["password_hash"]
+    ):
+        raise HTTPException(status_code=400, detail="La contraseña actual no es correcta")
+    if cambio.password_nueva == cambio.password_actual:
+        raise HTTPException(status_code=422, detail="Elige una contraseña distinta a la actual")
+    supabase.table("usuarios").update(
+        {
+            "password_hash": hash_password(cambio.password_nueva),
+            "token_version": int(registro.data[0]["token_version"]) + 1,
+        }
+    ).eq("id", usuario["id"]).execute()
+    return {"mensaje": "Contraseña actualizada. Inicia sesión de nuevo."}
 
 
 class SegmentoEditado(BaseModel):
